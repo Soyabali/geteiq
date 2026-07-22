@@ -8,6 +8,10 @@ import '../widgets/app_button.dart';
 import '../widgets/app_card.dart';
 import '../widgets/app_scaffold.dart';
 import 'invite_setup_sheet.dart';
+import 'invite_guest_list_screen.dart';
+import 'invited_by_guard_screen.dart';
+import 'month_guest_report_screen.dart';
+import 'yesterday_guest_list_screen.dart';
 
 /// Screen 4 — home. Sponsored slot, four entry points, and the primary
 /// "Add Guest" action that starts the invite flow.
@@ -265,12 +269,32 @@ class _ActionGrid extends StatelessWidget {
           icon: icon,
           title: title,
           subtitle: sub,
-          onTap: () => ScaffoldMessenger.of(context)
-            ..hideCurrentSnackBar()
-            ..showSnackBar(SnackBar(content: Text('$title — coming soon'))),
+          onTap: () => _openTile(context, i, title),
         );
       }, childCount: tiles.length),
     );
+  }
+
+  /// Each entry tile opens its own list screen. They share one UI
+  /// ([GuestListScreen]) but keep separate widgets + data sources, so each can
+  /// be wired to a different REST endpoint independently.
+  void _openTile(BuildContext context, int index, String title) {
+    final Widget? screen = switch (index) {
+      0 => const InviteGuestListScreen(),
+      1 => const InvitedByGuardScreen(),
+      2 => const YesterdayGuestListScreen(),
+      3 => const MonthGuestReportScreen(),
+      _ => null,
+    };
+
+    if (screen == null) {
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text('$title — coming soon')));
+      return;
+    }
+
+    Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => screen));
   }
 }
 
