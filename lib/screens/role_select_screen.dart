@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../models/user_role.dart';
 import '../theme/tokens.dart';
 import '../widgets/app_button.dart';
 import '../widgets/app_scaffold.dart';
@@ -11,9 +12,9 @@ class RoleSelectScreen extends StatelessWidget {
   const RoleSelectScreen({super.key});
 
   void _go(BuildContext context, UserRole role) {
-    Navigator.of(
-      context,
-    ).push(MaterialPageRoute<void>(builder: (_) => LoginScreen()));
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => LoginScreen(role: role)),
+    );
   }
 
   @override
@@ -49,13 +50,4 @@ class RoleSelectScreen extends StatelessWidget {
       ),
     );
   }
-}
-
-/// Which side of the gate the signed-in user sits on.
-enum UserRole {
-  management('Management'),
-  guard('Guard');
-
-  const UserRole(this.label);
-  final String label;
 }

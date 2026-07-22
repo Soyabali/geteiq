@@ -3,15 +3,29 @@ import 'package:flutter/material.dart';
 
 import '../data/demo_data.dart';
 import '../models/invite.dart';
+import '../models/user_role.dart';
 import '../theme/tokens.dart';
 import '../widgets/app_button.dart';
 import '../widgets/app_card.dart';
 import '../widgets/app_scaffold.dart';
+import 'guard_invite_screen.dart';
 import 'invite_setup_sheet.dart';
 import 'invite_guest_list_screen.dart';
 import 'invited_by_guard_screen.dart';
 import 'month_guest_report_screen.dart';
 import 'yesterday_guest_list_screen.dart';
+
+// ─────────────────────────────────────────────────────────────────────────
+// TEMPORARY — UI only, no API yet.
+// Hard-coded logged-in role so both "Add Guest" flows are testable without a
+// backend. Flip this value to see the other flow:
+//   UserRole.guard      → opens the full-screen GuardInviteScreen
+//   UserRole.management → opens the Invite() bottom sheet
+//
+// TODO(api): tomorrow, replace this single line with the real role coming from
+// login / session / the API response. Nothing else on this screen changes.
+const UserRole kLoggedInRole = UserRole.management;
+// ─────────────────────────────────────────────────────────────────────────
 
 /// Screen 4 — home. Sponsored slot, four entry points, and the primary
 /// "Add Guest" action that starts the invite flow.
@@ -243,7 +257,10 @@ class _ActionGrid extends StatelessWidget {
     const fixed =
         AppSpacing.lg * 2 + 42 + AppSpacing.lg; // padding + icon + gap
     final textBlock = (20 * 2 + 2 + 19) * textScale; // 2 title lines + subtitle
-    final extent = fixed + textBlock;
+    // Small safety margin: the line-height assumptions above are exact only
+    // for one specific font metrics table, so a hairline buffer keeps this
+    // from clipping under slightly different font rendering.
+    final extent = fixed + textBlock + 8;
 
     const tiles = [
       (
@@ -303,6 +320,19 @@ class _AddGuestBar extends StatelessWidget {
 
   final double gutter;
 
+  /// Decides which flow the "Add Guest" button opens, based on [kLoggedInRole].
+  void _onAddGuest(BuildContext context) {
+    if (kLoggedInRole == UserRole.guard) {
+      // Guard → full-screen "Invite Setup" for a walk-in guest at the gate.
+      Navigator.of(context).push(
+        MaterialPageRoute<void>(builder: (_) => const GuardInviteScreen()),
+      );
+    } else {
+      // Management → the existing Invite bottom sheet.
+      showInviteSetupSheet(context, Invite());
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -320,7 +350,7 @@ class _AddGuestBar extends StatelessWidget {
             child: PrimaryButton(
               label: 'Add Guest',
               trailing: Icons.arrow_forward_rounded,
-              onPressed: () => showInviteSetupSheet(context, Invite()),
+              onPressed: () => _onAddGuest(context),
             ),
           ),
         ),

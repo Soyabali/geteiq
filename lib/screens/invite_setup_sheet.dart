@@ -248,14 +248,17 @@ class _FrequencyTabs extends StatelessWidget {
   Widget build(BuildContext context) {
     final t = Theme.of(context).textTheme;
 
-    Widget tab(InviteFrequency f, String label) {
+    Widget tab(InviteFrequency f, String label, {bool last = false}) {
       final selected = f == value;
       return GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: () => onChanged(f),
         child: Padding(
-          padding: const EdgeInsets.only(
-            right: AppSpacing.xxl,
+          // The last tab doesn't need a trailing gap — keeping it on every
+          // tab was the difference between fitting and overflowing by a few
+          // pixels on narrower phones (~360-390 logical width).
+          padding: EdgeInsets.only(
+            right: last ? 0 : AppSpacing.xxl,
             bottom: AppSpacing.sm,
           ),
           child: Column(
@@ -285,11 +288,17 @@ class _FrequencyTabs extends StatelessWidget {
       );
     }
 
-    return Row(
-      children: [
-        tab(InviteFrequency.once, 'Once'),
-        tab(InviteFrequency.frequently, 'Frequently'),
-      ],
+    // A defensive horizontal scroll (rather than a bare Row) means a very
+    // narrow phone or larger text scale shrinks the tabs' hit area instead of
+    // hard-overflowing the layout.
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: [
+          tab(InviteFrequency.once, 'Once'),
+          tab(InviteFrequency.frequently, 'Frequently', last: true),
+        ],
+      ),
     );
   }
 }

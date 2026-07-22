@@ -5,20 +5,24 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:pinput/pinput.dart';
 
+import '../data/session.dart';
+import '../models/user_role.dart';
 import '../theme/tokens.dart';
 import '../widgets/app_button.dart';
 import '../widgets/app_scaffold.dart';
 import 'dashboard_screen.dart';
-import 'role_select_screen.dart';
 
 /// Screen 3 — mobile number, then a 4-digit OTP.
 ///
 /// The OTP block only appears once a code has been "sent", which keeps the
 /// first view as simple as the mockup.
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key});
+  /// Defaults to [UserRole.management] so screens that reach this one
+  /// directly (e.g. the splash screen currently skips role selection) keep
+  /// today's behavior. [RoleSelectScreen] passes the picked role explicitly.
+  const LoginScreen({super.key, this.role = UserRole.management});
 
- // final UserRole role;
+  final UserRole role;
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
@@ -103,6 +107,7 @@ class _LoginScreenState extends State<LoginScreen> {
     await Future<void>.delayed(const Duration(milliseconds: 700));
     if (!mounted) return;
 
+    AppSession.signIn(widget.role);
     setState(() => _verifying = false);
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute<void>(builder: (_) => const DashboardScreen()),
