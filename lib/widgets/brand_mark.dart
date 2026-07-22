@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-
 import '../theme/tokens.dart';
 
 /// The gateIQ four-square glyph, drawn rather than shipped as an image so it

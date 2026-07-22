@@ -5,6 +5,7 @@ import 'package:lottie/lottie.dart';
 
 import '../theme/tokens.dart';
 import '../widgets/brand_mark.dart';
+import 'login_screen.dart';
 import 'role_select_screen.dart';
 
 /// Screen 1 — brand moment.
@@ -47,7 +48,7 @@ class _SplashScreenState extends State<SplashScreen>
     Navigator.of(context).pushReplacement(
       PageRouteBuilder(
         transitionDuration: const Duration(milliseconds: 420),
-        pageBuilder: (_, __, ___) => const RoleSelectScreen(),
+        pageBuilder: (_, __, ___) => LoginScreen(),
         transitionsBuilder: (_, animation, __, child) {
           final curved = CurvedAnimation(
             parent: animation,

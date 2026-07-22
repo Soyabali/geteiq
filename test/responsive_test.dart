@@ -37,7 +37,7 @@ void main() {
 
         final screens = <String, Widget>{
           'role': const RoleSelectScreen(),
-          'login': const LoginScreen(role: UserRole.management),
+          'login': const LoginScreen(),
           'dashboard': const DashboardScreen(),
           'selectGuests': SelectGuestsScreen(invite: _invite()),
           'inviteDetails': InviteDetailsScreen(invite: _invite()),

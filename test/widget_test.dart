@@ -45,7 +45,7 @@ void main() {
     tester,
   ) async {
     await tester.pumpWidget(
-      _wrap(const LoginScreen(role: UserRole.management)),
+      _wrap(const LoginScreen()),
     );
 
     // OTP block stays hidden until a code has been requested.

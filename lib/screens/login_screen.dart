@@ -15,9 +15,9 @@ import 'role_select_screen.dart';
 /// The OTP block only appears once a code has been "sent", which keeps the
 /// first view as simple as the mockup.
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key, required this.role});
+  const LoginScreen({super.key});
 
-  final UserRole role;
+ // final UserRole role;
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
