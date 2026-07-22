@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:pinput/pinput.dart';
@@ -40,6 +41,15 @@ class _LoginScreenState extends State<LoginScreen> {
     super.initState();
     _phone.addListener(() => setState(() {}));
     _otp.addListener(() => setState(() {}));
+    setupPushNotifications();
+  }
+
+  void setupPushNotifications() async{
+    // Implement push notification setup logic here
+   final fcm = FirebaseMessaging.instance;
+   final token = await fcm.getToken();
+   //final token = await fcm.getAPNSToken();
+   print("Token : $token");
   }
 
   @override

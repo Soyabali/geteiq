@@ -1,4 +1,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Firebase Cloud Messaging needs network access. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- Required to show notifications on Android 13 (API 33) and above. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <application
         android:label="vms"
         android:name="${applicationName}"
@@ -30,6 +34,18 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+        <meta-data
+            android:name="firebase_messaging_auto_init_enabled"
+            android:value="true" />
+        <meta-data
+            android:name="firebase_analytics_collection_enabled"
+            android:value="false" />
+        <!-- Channel used for FCM notifications the OS renders on its own
+             (background / terminated). Must match kDefaultChannel in
+             lib/services/notification_service.dart. -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="high_importance_channel" />
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and

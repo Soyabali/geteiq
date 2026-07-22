@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'screens/splash_screen.dart';
+import 'services/notification_service.dart';
 import 'theme/app_theme.dart';
 
 class MyApp extends StatelessWidget {
@@ -10,6 +11,7 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'gateIQ',
+      navigatorKey: navigatorKey, // enables navigation from notification taps
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light(),
       home: const SplashScreen(),

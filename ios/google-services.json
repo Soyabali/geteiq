@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "904221121724",
+    "project_id": "gateiq-a09f6",
+    "storage_bucket": "gateiq-a09f6.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:904221121724:android:0988bdc9b1d5e57038c4b9",
+        "android_client_info": {
+          "package_name": "com.synergynoida.vms"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCDZCMoRFTvsz09T2-kwJH_kk21ZdZaCZQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
