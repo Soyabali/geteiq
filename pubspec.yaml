@@ -45,6 +45,8 @@ dependencies:
   # Renders notifications while the app is in the FOREGROUND (Android does not
   # display FCM `notification` payloads automatically when the app is open).
   flutter_local_notifications: ^19.0.0
+  flutter_easyloading: ^3.0.5
+  shared_preferences: ^2.5.5
 
 dev_dependencies:
   flutter_test:

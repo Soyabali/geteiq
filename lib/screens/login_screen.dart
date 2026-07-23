@@ -4,9 +4,12 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:pinput/pinput.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../data/session.dart';
 import '../models/user_role.dart';
+import '../services/getOtp.dart';
+import '../services/validateOtp.dart';
 import '../theme/tokens.dart';
 import '../widgets/app_button.dart';
 import '../widgets/app_scaffold.dart';
@@ -70,22 +73,45 @@ class _LoginScreenState extends State<LoginScreen> {
   bool get _phoneValid => _digits.length == 10;
   bool get _canLogin => _otpSent && _otp.text.length == _otpLength;
 
+  // STEP 1 : user typed the mobile no and pressed "Send OTP".
   void _sendOtp() {
     if (!_phoneValid) return;
     FocusScope.of(context).unfocus();
-    setState(() => _otpSent = true);
+    setState(() => _otpSent = true); // show the OTP box
     _startResendCountdown();
 
-    // Give the sheet a beat to appear before pulling focus into it.
+    // Give the box a beat to appear before pulling focus into it.
     Future<void>.delayed(const Duration(milliseconds: 220), () {
       if (mounted) _otpFocus.requestFocus();
     });
 
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(content: Text('OTP sent to +91 ${_formatted(_digits)}')),
-      );
+    // call the FIRST api -> send otp on this number
+    getOtpResponse();
+  }
+
+  // FIRST API : VmsApiManagementGetOtp  (only sends the OTP)
+  void getOtpResponse() async {
+    // _digits = clean 10-digit number (no spaces)
+    var getOtp = await GetOtpRepo().getOtp(context, _digits);
+    print("------getOtpResponse----------$getOtp");
+    if (!mounted) return;
+
+    var result = "${getOtp['Result']}";
+    var msg = "${getOtp['Msg']}";
+
+    if (result == "1") {
+      // OTP sent -> the OTP box is already visible, just tell the user.
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(content: Text('OTP sent to +91 ${_formatted(_digits)}')),
+        );
+    } else {
+      // something went wrong -> show the api message
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text('$msg')));
+    }
   }
 
   void _startResendCountdown() {
@@ -98,21 +124,60 @@ class _LoginScreenState extends State<LoginScreen> {
     });
   }
 
+
+  // STEP 2 : user filled the OTP and pressed "Login".
+  // SECOND API : VmsApiManagementValidateOtp (mobileNo + otp -> verify).
   Future<void> _login() async {
     if (!_canLogin) return;
     FocusScope.of(context).unfocus();
     setState(() => _verifying = true);
 
-    // Stand-in for the verify call.
-    await Future<void>.delayed(const Duration(milliseconds: 700));
-    if (!mounted) return;
+    // ================= CHANGE HERE (OTP value) =================
+    // This sends whatever the user typed in the OTP box to the api.
+    // While testing, the backend accepts the fixed OTP "1982",
+    // so just type 1982 in the box and login will work.
+    //
+    // NOTE: if you ever want to FORCE a fixed test otp (ignore the box),
+    // replace the line below with:  var otpNumber = "1982";
+    var otpNumber = _otp.text.trim(); // otp from the box (type 1982 for now)
+    // ===========================================================
+    var phoneNumber = _digits;        // clean 10-digit number
 
-    AppSession.signIn(widget.role);
-    setState(() => _verifying = false);
-    Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute<void>(builder: (_) => const DashboardScreen()),
-      (route) => false,
+    // call the SECOND api -> validate the otp
+    var response = await ValidateOtpRepo().validateOtp(
+      context,
+      otpNumber,
+      phoneNumber,
     );
+    print("------validateOtpResponse----------$response");
+    if (!mounted) return;
+    setState(() => _verifying = false);
+
+    var result = "${response['Result']}";
+    var msg = "${response['Msg']}";
+
+    if (result == "1") {
+      // success -> save the user detail in sharedPreference
+      SharedPreferences prefs = await SharedPreferences.getInstance();
+      await prefs.setString('sUserName', "${response['sUserName']}");
+      await prefs.setString('sContactNo', "${response['sContactNo']}");
+      await prefs.setString('iUserType', "${response['iUserType']}");
+      await prefs.setString('sEmailId', "${response['sEmailId']}");
+      await prefs.setBool('isLoggedIn', true);
+      if (!mounted) return;
+
+      // go to the Dashboard
+      AppSession.signIn(widget.role);
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute<void>(builder: (_) => const DashboardScreen()),
+        (route) => false,
+      );
+    } else {
+      // wrong otp / failed -> stay on screen and show the message
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text('$msg')));
+    }
   }
 
   static String _formatted(String digits) => digits.length == 10
@@ -159,6 +224,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
               ),
               const SizedBox(width: AppSpacing.md),
+              // Send Otp button
               _SendOtpButton(
                 enabled: _phoneValid && _resendIn == 0,
                 label: _resendIn > 0 ? '${_resendIn}s' : 'Send OTP',

@@ -83,7 +83,6 @@ class _DashboardHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context).textTheme;
-
     return Row(
       children: [
         Expanded(
