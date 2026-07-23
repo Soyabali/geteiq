@@ -30,19 +30,20 @@ class PreApprovalVisitorRepo {
       // iValidHours -> only the number, e.g. "1"  (no "Hour" / "Hours")
       final iValidHours = invite.validForHours.toString();
 
-      // GuestList -> "[{sGuestName:Amit,sContactNo:9711107824},{...}]"
-      // One {..} block per selected guest:
-      //   1 guest  -> one block
-      //   many     -> many blocks joined by comma
-      final guestBlocks = invite.guests.map((g) {
+      // GuestList -> a JSON string with QUOTED keys AND values, e.g.:
+      // '[{"sGuestName":"Jitender","sContactNo":"9810754385"},{...}]'
+      //
+      // Build a real List<Map> first, then json.encode() it. json.encode adds
+      // the double-quotes correctly, so the server can parse it.
+      final guestMaps = invite.guests.map((g) {
         final digits = g.phone.replaceAll(RegExp(r'\D'), ''); // keep only 0-9
         // take the last 10 digits so "+91 97111 07824" -> "9711107824"
         final contactNo = digits.length > 10
             ? digits.substring(digits.length - 10)
             : digits;
-        return '{sGuestName:${g.name},sContactNo:$contactNo}';
-      }).join(',');
-      final guestList = '[$guestBlocks]';
+        return {"sGuestName": g.name, "sContactNo": contactNo};
+      }).toList();
+      final guestList = json.encode(guestMaps); // -> proper JSON string
 
       var body = {
         "dDate": dDate,
@@ -53,6 +54,7 @@ class PreApprovalVisitorRepo {
         "GuestList": guestList,
       };
       print('----PreApproval BODY----> $body');
+      print('----PreApproval GuestList----> $guestList');
 
       // ---------- 2) hit the api ----------
       var baseURL = BaseRepo().baseurl;

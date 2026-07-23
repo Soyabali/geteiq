@@ -1,9 +1,9 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../data/demo_data.dart';
 import '../models/invite.dart';
-import '../models/user_role.dart';
 import '../theme/tokens.dart';
 import '../widgets/app_button.dart';
 import '../widgets/app_card.dart';
@@ -14,18 +14,6 @@ import 'invite_guest_list_screen.dart';
 import 'invited_by_guard_screen.dart';
 import 'month_guest_report_screen.dart';
 import 'yesterday_guest_list_screen.dart';
-
-// ─────────────────────────────────────────────────────────────────────────
-// TEMPORARY — UI only, no API yet.
-// Hard-coded logged-in role so both "Add Guest" flows are testable without a
-// backend. Flip this value to see the other flow:
-//   UserRole.guard      → opens the full-screen GuardInviteScreen
-//   UserRole.management → opens the Invite() bottom sheet
-//
-// TODO(api): tomorrow, replace this single line with the real role coming from
-// login / session / the API response. Nothing else on this screen changes.
-const UserRole kLoggedInRole = UserRole.management;
-// ─────────────────────────────────────────────────────────────────────────
 
 /// Screen 4 — home. Sponsored slot, four entry points, and the primary
 /// "Add Guest" action that starts the invite flow.
@@ -319,9 +307,17 @@ class _AddGuestBar extends StatelessWidget {
 
   final double gutter;
 
-  /// Decides which flow the "Add Guest" button opens, based on [kLoggedInRole].
-  void _onAddGuest(BuildContext context) {
-    if (kLoggedInRole == UserRole.guard) {
+  /// Decides which flow the "Add Guest" button opens, based on the logged-in
+  /// user's type saved at login time (SharedPreferences key 'iUserType').
+  ///   iUserType == "1"  → Guard  → full-screen GuardInviteScreen
+  ///   otherwise (e.g. "2" management) → the Invite() bottom sheet
+  Future<void> _onAddGuest(BuildContext context) async {
+    // Read the user type stored during login.
+    final prefs = await SharedPreferences.getInstance();
+    final iUserType = prefs.getString('iUserType') ?? '';
+    if (!context.mounted) return;
+
+    if (iUserType == "1") {
       // Guard → full-screen "Invite Setup" for a walk-in guest at the gate.
       Navigator.of(context).push(
         MaterialPageRoute<void>(builder: (_) => const GuardInviteScreen()),
