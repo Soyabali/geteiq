@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../models/invite.dart';
+import '../services/VmsManagementPreApprovalVisitor.dart';
 import '../theme/tokens.dart';
 import '../widgets/app_button.dart';
 import '../widgets/app_card.dart';
@@ -63,18 +64,54 @@ class _InviteDetailsScreenState extends State<InviteDetailsScreen> {
 
   Future<void> _create() async {
     FocusScope.of(context).unfocus();
+    // pick the note text-field value before sending.
     widget.invite.note = _note.text.trim();
     setState(() => _creating = true);
 
-    await Future<void>.delayed(const Duration(milliseconds: 600));
-    if (!mounted) return;
+    try {
+      // Call the api with ALL the data:
+      // date, time, valid hours, note, and the selected guest list.
+      final response = await PreApprovalVisitorRepo().createPreApproval(
+        context,
+        widget.invite,
+      );
+      if (!mounted) return;
+      setState(() => _creating = false);
 
-    setState(() => _creating = false);
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => TicketScreen(invite: widget.invite),
-      ),
-    );
+      final result = "${response['Result']}";
+      final msg = "${response['Msg']}";
+      final qrCode = "${response['QRCode']}"; // image url of the QR
+
+      if (result == "1") {
+        // SUCCESS -> show the message as a toast...
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(SnackBar(content: Text(msg)));
+
+        // ...and carry the QRCode url to the ticket screen.
+        Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) =>
+                TicketScreen(invite: widget.invite, qrCodeUrl: qrCode),
+          ),
+        );
+      } else {
+        // FAILED -> just show the api message.
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(SnackBar(content: Text(msg)));
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _creating = false);
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          const SnackBar(
+            content: Text('Something went wrong. Please try again.'),
+          ),
+        );
+    }
   }
 
   @override
@@ -83,146 +120,153 @@ class _InviteDetailsScreenState extends State<InviteDetailsScreen> {
     final gutter = AppSpacing.gutter(context);
     final guests = widget.invite.guests;
 
-    return Scaffold(
-      backgroundColor: AppColors.canvas,
-      appBar: AppBar(
-        titleSpacing: gutter,
-        leadingWidth: gutter + 32,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
-          onPressed: () => Navigator.of(context).maybePop(),
+    // Tap anywhere on the screen (outside the note field) -> hide the keyboard.
+    return GestureDetector(
+      onTap: () => FocusScope.of(context).unfocus(),
+      behavior: HitTestBehavior.opaque,
+      child: Scaffold(
+        backgroundColor: AppColors.canvas,
+        appBar: AppBar(
+          titleSpacing: gutter,
+          leadingWidth: gutter + 32,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
+            onPressed: () => Navigator.of(context).maybePop(),
+          ),
+          title: const Text('Invite Guests'),
         ),
-        title: const Text('Invite Guests'),
-      ),
-      body: SafeArea(
-        bottom: false,
-        child: CenteredFill(
-          child: ListView(
-            padding: EdgeInsets.fromLTRB(
-              gutter,
-              AppSpacing.md,
-              gutter,
-              AppSpacing.xxl,
-            ),
-            physics: const BouncingScrollPhysics(
-              parent: AlwaysScrollableScrollPhysics(),
-            ),
-            children: [
-              Text(
-                widget.invite.frequency == InviteFrequency.once
-                    ? 'Allow single entry between'
-                    : 'Allow repeated entry between',
-                style: t.bodyMedium,
+        body: SafeArea(
+          bottom: false,
+          child: CenteredFill(
+            child: ListView(
+              padding: EdgeInsets.fromLTRB(
+                gutter,
+                AppSpacing.md,
+                gutter,
+                AppSpacing.xxl,
               ),
-              const SizedBox(height: AppSpacing.md),
-              Row(
-                children: [
-                  Expanded(
+              physics: const BouncingScrollPhysics(
+                parent: AlwaysScrollableScrollPhysics(),
+              ),
+              children: [
+                Text(
+                  widget.invite.frequency == InviteFrequency.once
+                      ? 'Allow single entry between'
+                      : 'Allow repeated entry between',
+                  style: t.bodyMedium,
+                ),
+                const SizedBox(height: AppSpacing.md),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        _window,
+                        style: t.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    const Icon(
+                      Icons.keyboard_arrow_down_rounded,
+                      size: 20,
+                      color: AppColors.muted,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: AppSpacing.md),
+                const Divider(),
+                const SizedBox(height: AppSpacing.xxl),
+
+                Text('Add a Note', style: t.bodyMedium),
+                const SizedBox(height: AppSpacing.md),
+                TextField(
+                  controller: _note,
+                  maxLines: 3,
+                  minLines: 2,
+                  maxLength: 120,
+                  textCapitalization: TextCapitalization.sentences,
+                  decoration: const InputDecoration(
+                    hintText: 'Add a note for the guard or your guest',
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.lg),
+
+                Row(
+                  children: [
+                    // Flexible so a large text scale wraps instead of overflowing.
+                    Flexible(
+                      child: Text('Manage guest list', style: t.titleMedium),
+                    ),
+                    const SizedBox(width: AppSpacing.sm),
+                    Text('(${guests.length})', style: t.bodySmall),
+                  ],
+                ),
+                const SizedBox(height: AppSpacing.lg),
+
+                if (guests.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      vertical: AppSpacing.xl,
+                    ),
                     child: Text(
-                      _window,
-                      style: t.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
+                      'No guests added yet.',
+                      style: t.bodySmall,
+                      textAlign: TextAlign.center,
+                    ),
+                  )
+                else
+                  ...guests.map(
+                    (g) => Padding(
+                      padding: const EdgeInsets.only(bottom: AppSpacing.md),
+                      child: _GuestListItem(
+                        guest: g,
+                        onEdit: () => _edit(g),
+                        onRemove: () => _remove(g),
                       ),
                     ),
                   ),
-                  const Icon(
-                    Icons.keyboard_arrow_down_rounded,
+
+                const SizedBox(height: AppSpacing.sm),
+                TextButton.icon(
+                  onPressed: () => Navigator.of(context).maybePop(),
+                  icon: const Icon(
+                    Icons.add_circle_outline_rounded,
                     size: 20,
-                    color: AppColors.muted,
+                    color: AppColors.brand,
                   ),
-                ],
-              ),
-              const SizedBox(height: AppSpacing.md),
-              const Divider(),
-              const SizedBox(height: AppSpacing.xxl),
-
-              Text('Add a Note', style: t.bodyMedium),
-              const SizedBox(height: AppSpacing.md),
-              TextField(
-                controller: _note,
-                maxLines: 3,
-                minLines: 2,
-                maxLength: 120,
-                textCapitalization: TextCapitalization.sentences,
-                decoration: const InputDecoration(
-                  hintText: 'Add a note for the guard or your guest',
-                ),
-              ),
-              const SizedBox(height: AppSpacing.lg),
-
-              Row(
-                children: [
-                  // Flexible so a large text scale wraps instead of overflowing.
-                  Flexible(
-                    child: Text('Manage guest list', style: t.titleMedium),
-                  ),
-                  const SizedBox(width: AppSpacing.sm),
-                  Text('(${guests.length})', style: t.bodySmall),
-                ],
-              ),
-              const SizedBox(height: AppSpacing.lg),
-
-              if (guests.isEmpty)
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: AppSpacing.xl),
-                  child: Text(
-                    'No guests added yet.',
-                    style: t.bodySmall,
-                    textAlign: TextAlign.center,
-                  ),
-                )
-              else
-                ...guests.map(
-                  (g) => Padding(
-                    padding: const EdgeInsets.only(bottom: AppSpacing.md),
-                    child: _GuestListItem(
-                      guest: g,
-                      onEdit: () => _edit(g),
-                      onRemove: () => _remove(g),
+                  label: Text(
+                    'Add Guests',
+                    style: t.titleSmall?.copyWith(
+                      color: AppColors.brand,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
-                ),
-
-              const SizedBox(height: AppSpacing.sm),
-              TextButton.icon(
-                onPressed: () => Navigator.of(context).maybePop(),
-                icon: const Icon(
-                  Icons.add_circle_outline_rounded,
-                  size: 20,
-                  color: AppColors.brand,
-                ),
-                label: Text(
-                  'Add Guests',
-                  style: t.titleSmall?.copyWith(
-                    color: AppColors.brand,
-                    fontWeight: FontWeight.w700,
+                  style: TextButton.styleFrom(
+                    padding: EdgeInsets.zero,
+                    alignment: Alignment.centerLeft,
                   ),
                 ),
-                style: TextButton.styleFrom(
-                  padding: EdgeInsets.zero,
-                  alignment: Alignment.centerLeft,
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
-      ),
-      bottomNavigationBar: Container(
-        color: AppColors.canvas,
-        child: SafeArea(
-          top: false,
-          child: Padding(
-            padding: EdgeInsets.fromLTRB(
-              gutter,
-              AppSpacing.md,
-              gutter,
-              AppSpacing.md,
-            ),
-            child: CenteredBar(
-              child: PrimaryButton(
-                label: 'Create Invite',
-                loading: _creating,
-                onPressed: guests.isEmpty ? null : _create,
+        bottomNavigationBar: Container(
+          color: AppColors.canvas,
+          child: SafeArea(
+            top: false,
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(
+                gutter,
+                AppSpacing.md,
+                gutter,
+                AppSpacing.md,
+              ),
+              child: CenteredBar(
+                child: PrimaryButton(
+                  label: 'Create Invite',
+                  loading: _creating,
+                  onPressed: guests.isEmpty ? null : _create,
+                ),
               ),
             ),
           ),

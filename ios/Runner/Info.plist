@@ -2,6 +2,9 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+    <!-- Shown in the iOS popup when we ask to read contacts. -->
+    <key>NSContactsUsageDescription</key>
+    <string>Allow access to your contacts to quickly pick and invite guests.</string>
     <key>FirebaseMessagingAutoInitEnabled</key>
     <true/>
     <key>CADisableMinimumFrameDurationOnPhone</key>

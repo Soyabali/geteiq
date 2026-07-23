@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../data/demo_data.dart';
 import '../models/invite.dart';
+import '../services/contacts_service.dart';
 import '../theme/tokens.dart';
 import '../widgets/app_button.dart';
 import '../widgets/app_card.dart';
@@ -25,6 +26,44 @@ class _SelectGuestsScreenState extends State<SelectGuestsScreen>
   final _search = TextEditingController();
   late final List<Guest> _selected = List.of(widget.invite.guests);
 
+  // Real phone contacts loaded from the device.
+  List<Guest> _contacts = const <Guest>[];
+  bool _loadingContacts = true; // show a spinner while reading contacts
+  bool _permissionDenied = false; // user said "Don't Allow"
+
+  @override
+  void initState() {
+    super.initState();
+    _loadContacts(); // pull the real contacts as soon as the screen opens
+  }
+
+  // Ask permission + read the phone contacts, then show them in the list.
+  Future<void> _loadContacts() async {
+    setState(() {
+      _loadingContacts = true;
+      _permissionDenied = false;
+    });
+
+    final result = await ContactsService.loadDeviceContacts();
+    if (!mounted) return;
+
+    setState(() {
+      _loadingContacts = false;
+      if (result.permissionGranted) {
+        // Access allowed -> use real contacts.
+        // (If the phone genuinely has none, fall back to the demo list so the
+        //  screen is never blank while testing.)
+        _contacts = result.guests.isNotEmpty
+            ? result.guests
+            : DemoData.contacts;
+      } else {
+        // Access denied -> keep the demo list and show a "grant access" hint.
+        _permissionDenied = true;
+        _contacts = DemoData.contacts;
+      }
+    });
+  }
+
   @override
   void dispose() {
     _tabs.dispose();
@@ -34,8 +73,8 @@ class _SelectGuestsScreenState extends State<SelectGuestsScreen>
 
   List<Guest> get _filteredContacts {
     final q = _search.text.trim().toLowerCase();
-    if (q.isEmpty) return DemoData.contacts;
-    return DemoData.contacts
+    if (q.isEmpty) return _contacts;
+    return _contacts
         .where(
           (c) =>
               c.name.toLowerCase().contains(q) ||
@@ -75,95 +114,103 @@ class _SelectGuestsScreenState extends State<SelectGuestsScreen>
   Widget build(BuildContext context) {
     final gutter = AppSpacing.gutter(context);
 
-    return Scaffold(
-      backgroundColor: AppColors.canvas,
-      appBar: AppBar(
-        titleSpacing: gutter,
-        leadingWidth: gutter + 32,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
-          onPressed: () => Navigator.of(context).maybePop(),
+    // Tap anywhere on the screen (outside a text field) -> hide the keyboard.
+    return GestureDetector(
+      onTap: () => FocusScope.of(context).unfocus(),
+      behavior: HitTestBehavior.opaque,
+      child: Scaffold(
+        backgroundColor: AppColors.canvas,
+        appBar: AppBar(
+          titleSpacing: gutter,
+          leadingWidth: gutter + 32,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
+            onPressed: () => Navigator.of(context).maybePop(),
+          ),
+          title: const Text('Select Guests'),
+          bottom: PreferredSize(
+            preferredSize: const Size.fromHeight(48),
+            child: Padding(
+              padding: EdgeInsets.symmetric(horizontal: gutter),
+              child: TabBar(
+                controller: _tabs,
+                isScrollable: true,
+                tabAlignment: TabAlignment.start,
+                indicatorColor: AppColors.brand,
+                indicatorWeight: 3,
+                indicatorSize: TabBarIndicatorSize.label,
+                labelColor: AppColors.ink,
+                unselectedLabelColor: AppColors.faint,
+                dividerColor: Colors.transparent,
+                labelStyle: Theme.of(context).textTheme.titleMedium,
+                unselectedLabelStyle: Theme.of(context).textTheme.titleMedium,
+                tabs: const [
+                  Tab(text: 'Contacts'),
+                  Tab(text: 'Recent'),
+                  Tab(text: 'Add Manually'),
+                ],
+              ),
+            ),
+          ),
         ),
-        title: const Text('Select Guests'),
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(48),
-          child: Padding(
-            padding: EdgeInsets.symmetric(horizontal: gutter),
-            child: TabBar(
-              controller: _tabs,
-              isScrollable: true,
-              tabAlignment: TabAlignment.start,
-              indicatorColor: AppColors.brand,
-              indicatorWeight: 3,
-              indicatorSize: TabBarIndicatorSize.label,
-              labelColor: AppColors.ink,
-              unselectedLabelColor: AppColors.faint,
-              dividerColor: Colors.transparent,
-              labelStyle: Theme.of(context).textTheme.titleMedium,
-              unselectedLabelStyle: Theme.of(context).textTheme.titleMedium,
-              tabs: const [
-                Tab(text: 'Contacts'),
-                Tab(text: 'Recent'),
-                Tab(text: 'Add Manually'),
+        body: SafeArea(
+          bottom: false,
+          child: CenteredFill(
+            child: Column(
+              children: [
+                if (_selected.isNotEmpty)
+                  _SelectedChips(
+                    guests: _selected,
+                    gutter: gutter,
+                    onRemove: _toggle,
+                  ),
+                Expanded(
+                  child: TabBarView(
+                    controller: _tabs,
+                    children: [
+                      _ContactsTab(
+                        search: _search,
+                        contacts: _filteredContacts,
+                        isSelected: _isSelected,
+                        onToggle: _toggle,
+                        onSearchChanged: () => setState(() {}),
+                        loading: _loadingContacts,
+                        permissionDenied: _permissionDenied,
+                        onRetry: _loadContacts,
+                        gutter: gutter,
+                      ),
+                      _RecentTab(
+                        isSelected: _isSelected,
+                        onToggle: _toggle,
+                        gutter: gutter,
+                      ),
+                      _ManualTab(onAdd: _addManual, gutter: gutter),
+                    ],
+                  ),
+                ),
               ],
             ),
           ),
         ),
-      ),
-      body: SafeArea(
-        bottom: false,
-        child: CenteredFill(
-          child: Column(
-            children: [
-              if (_selected.isNotEmpty)
-                _SelectedChips(
-                  guests: _selected,
-                  gutter: gutter,
-                  onRemove: _toggle,
-                ),
-              Expanded(
-                child: TabBarView(
-                  controller: _tabs,
-                  children: [
-                    _ContactsTab(
-                      search: _search,
-                      contacts: _filteredContacts,
-                      isSelected: _isSelected,
-                      onToggle: _toggle,
-                      onSearchChanged: () => setState(() {}),
-                      gutter: gutter,
-                    ),
-                    _RecentTab(
-                      isSelected: _isSelected,
-                      onToggle: _toggle,
-                      gutter: gutter,
-                    ),
-                    _ManualTab(onAdd: _addManual, gutter: gutter),
-                  ],
-                ),
+        bottomNavigationBar: Container(
+          color: AppColors.canvas,
+          child: SafeArea(
+            top: false,
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(
+                gutter,
+                AppSpacing.md,
+                gutter,
+                AppSpacing.md,
               ),
-            ],
-          ),
-        ),
-      ),
-      bottomNavigationBar: Container(
-        color: AppColors.canvas,
-        child: SafeArea(
-          top: false,
-          child: Padding(
-            padding: EdgeInsets.fromLTRB(
-              gutter,
-              AppSpacing.md,
-              gutter,
-              AppSpacing.md,
-            ),
-            child: CenteredBar(
-              child: PrimaryButton(
-                label: _selected.isEmpty
-                    ? 'Next'
-                    : 'Next  ·  ${_selected.length} selected',
-                trailing: Icons.chevron_right_rounded,
-                onPressed: _selected.isEmpty ? null : _next,
+              child: CenteredBar(
+                child: PrimaryButton(
+                  label: _selected.isEmpty
+                      ? 'Next'
+                      : 'Next  ·  ${_selected.length} selected',
+                  trailing: Icons.chevron_right_rounded,
+                  onPressed: _selected.isEmpty ? null : _next,
+                ),
               ),
             ),
           ),
@@ -221,6 +268,9 @@ class _ContactsTab extends StatelessWidget {
     required this.isSelected,
     required this.onToggle,
     required this.onSearchChanged,
+    required this.loading,
+    required this.permissionDenied,
+    required this.onRetry,
     required this.gutter,
   });
 
@@ -229,12 +279,28 @@ class _ContactsTab extends StatelessWidget {
   final bool Function(Guest) isSelected;
   final ValueChanged<Guest> onToggle;
   final VoidCallback onSearchChanged;
+  final bool loading;
+  final bool permissionDenied;
+  final VoidCallback onRetry;
   final double gutter;
 
   @override
   Widget build(BuildContext context) {
+    // Still reading the phone contacts -> show a spinner.
+    if (loading) {
+      return const Center(
+        child: CircularProgressIndicator(color: AppColors.brand),
+      );
+    }
+
     return Column(
       children: [
+        // Small banner if the user blocked contact access.
+        if (permissionDenied)
+          Padding(
+            padding: EdgeInsets.fromLTRB(gutter, AppSpacing.md, gutter, 0),
+            child: _PermissionBanner(onRetry: onRetry),
+          ),
         Padding(
           padding: EdgeInsets.fromLTRB(
             gutter,
@@ -499,6 +565,44 @@ class _Avatar extends StatelessWidget {
           color: active ? Colors.white : AppColors.brand,
           fontSize: 14,
         ),
+      ),
+    );
+  }
+}
+
+/// Shown at the top of the Contacts tab when contact access was denied.
+class _PermissionBanner extends StatelessWidget {
+  const _PermissionBanner({required this.onRetry});
+
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.md,
+        vertical: AppSpacing.sm,
+      ),
+      decoration: BoxDecoration(
+        color: AppColors.brandTint,
+        borderRadius: BorderRadius.circular(AppRadii.md),
+      ),
+      child: Row(
+        children: [
+          const Icon(
+            Icons.info_outline_rounded,
+            size: 18,
+            color: AppColors.brand,
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: Text(
+              'Contacts access is off — showing sample list.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ),
+          TextButton(onPressed: onRetry, child: const Text('Allow')),
+        ],
       ),
     );
   }

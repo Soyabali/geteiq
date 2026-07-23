@@ -29,7 +29,8 @@ class _InviteSetupSheet extends StatefulWidget {
 class _InviteSetupSheetState extends State<_InviteSetupSheet> {
   late final Invite _invite = widget.invite;
 
-  static const _durations = [1, 2, 4, 8, 12, 24];
+  // "Valid for" drop-down options: 1 to 8 hours.
+  static const _durations = [1, 2, 3, 4, 5, 6, 7, 8];
 
   TimeOfDay get _start {
     final t = _invite.startTime ?? TimeOfDayValue.fromDateTime(DateTime.now());
@@ -64,26 +65,45 @@ class _InviteSetupSheetState extends State<_InviteSetupSheet> {
       context: context,
       backgroundColor: AppColors.surface,
       shape: const RoundedRectangleBorder(borderRadius: AppRadii.sheetShape),
+      // Let the sheet grow beyond the default height, but never past 70% of
+      // the screen — the options scroll inside if they don't fit.
+      isScrollControlled: true,
       builder: (context) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(height: AppSpacing.md),
-            const _Grabber(),
-            const SizedBox(height: AppSpacing.lg),
-            Text('Valid for', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: AppSpacing.sm),
-            ..._durations.map(
-              (h) => ListTile(
-                title: Text('$h ${h == 1 ? "Hour" : "Hours"}'),
-                trailing: h == _invite.validForHours
-                    ? const Icon(Icons.check_rounded, color: AppColors.brand)
-                    : null,
-                onTap: () => Navigator.of(context).pop(h),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.sizeOf(context).height * 0.7,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: AppSpacing.md),
+              const _Grabber(),
+              const SizedBox(height: AppSpacing.lg),
+              Text('Valid for', style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: AppSpacing.sm),
+              // Scrollable list -> no more bottom overflow with 8 options.
+              Flexible(
+                child: ListView(
+                  shrinkWrap: true,
+                  padding: const EdgeInsets.only(bottom: AppSpacing.md),
+                  children: _durations
+                      .map(
+                        (h) => ListTile(
+                          title: Text('$h ${h == 1 ? "Hour" : "Hours"}'),
+                          trailing: h == _invite.validForHours
+                              ? const Icon(
+                                  Icons.check_rounded,
+                                  color: AppColors.brand,
+                                )
+                              : null,
+                          onTap: () => Navigator.of(context).pop(h),
+                        ),
+                      )
+                      .toList(),
+                ),
               ),
-            ),
-            const SizedBox(height: AppSpacing.md),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -91,10 +111,26 @@ class _InviteSetupSheetState extends State<_InviteSetupSheet> {
   }
 
   void _next() {
+    // The three values the next screen / API needs, in the API's own format.
+    // (All three also live inside `_invite`, so passing `_invite` forward
+    //  carries them to every screen after this one.)
+    final dDate = DateFormat('dd/MMM/yyyy').format(_invite.date); // 24/Jul/2026
+    final st = _invite.startTime ?? TimeOfDayValue.fromDateTime(DateTime.now());
+    final dTime =
+        '${st.hour.toString().padLeft(2, '0')}:${st.minute.toString().padLeft(2, '0')}'; // 18:00
+    final iValidHours = _invite.validForHours; // 1..8 (number only)
+
+    // Print the picked values clearly on button click.
+    print('==================== INVITE SETUP ====================');
+    print('dDate       : $dDate');
+    print('dTime       : $dTime');
+    print('iValidHours : $iValidHours');
+    print('======================================================');
+
     // Grab the navigator before popping — this context is torn down with
     // the sheet route.
     final navigator = Navigator.of(context);
-    navigator.pop();
+    navigator.pop(); // close the bottom sheet
     navigator.push(
       MaterialPageRoute<void>(
         builder: (_) => SelectGuestsScreen(invite: _invite),
@@ -158,12 +194,8 @@ class _InviteSetupSheetState extends State<_InviteSetupSheet> {
                         value: _invite.frequency,
                         onChanged: (f) => setState(() => _invite.frequency = f),
                       ),
-                      const SizedBox(height: AppSpacing.xxl),
-                      _PrivateToggle(
-                        value: _invite.isPrivate,
-                        onChanged: (v) => setState(() => _invite.isPrivate = v),
-                      ),
-                      const SizedBox(height: AppSpacing.xxl),
+                      // Single, tight gap between "Once" and "Select Date".
+                      const SizedBox(height: AppSpacing.xl),
                       _Field(
                         label: 'Select Date',
                         value: _dateLabel,
@@ -207,6 +239,7 @@ class _InviteSetupSheetState extends State<_InviteSetupSheet> {
                         },
                       ),
                       const SizedBox(height: AppSpacing.xxl),
+                      /// todo next page jum
                       PrimaryButton(label: 'Select Guest(s)', onPressed: _next),
                       const SizedBox(height: AppSpacing.sm),
                     ],
@@ -296,80 +329,7 @@ class _FrequencyTabs extends StatelessWidget {
       child: Row(
         children: [
           tab(InviteFrequency.once, 'Once'),
-          tab(InviteFrequency.frequently, 'Frequently', last: true),
-        ],
-      ),
-    );
-  }
-}
-
-class _PrivateToggle extends StatelessWidget {
-  const _PrivateToggle({required this.value, required this.onChanged});
-
-  final bool value;
-  final ValueChanged<bool> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    final t = Theme.of(context).textTheme;
-
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: () => onChanged(!value),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Custom box so it matches the mockup's square checkbox.
-          AnimatedContainer(
-            duration: const Duration(milliseconds: 180),
-            width: 26,
-            height: 26,
-            decoration: BoxDecoration(
-              color: value ? AppColors.brand : Colors.transparent,
-              borderRadius: BorderRadius.circular(AppRadii.sm),
-              border: Border.all(
-                color: value ? AppColors.brand : AppColors.border,
-                width: 1.8,
-              ),
-            ),
-            child: value
-                ? const Icon(Icons.check_rounded, size: 17, color: Colors.white)
-                : null,
-          ),
-          const SizedBox(width: AppSpacing.md),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Make it private', style: t.titleMedium),
-                const SizedBox(height: 3),
-                Text.rich(
-                  TextSpan(
-                    style: t.bodySmall,
-                    children: [
-                      const TextSpan(
-                        text:
-                            'This allows silent entries of your guests without disturbing others ',
-                      ),
-                      TextSpan(
-                        text: 'Know more',
-                        style: t.bodySmall?.copyWith(
-                          color: AppColors.brand,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: AppSpacing.sm),
-          Icon(
-            value ? Icons.lock_rounded : Icons.lock_open_rounded,
-            color: AppColors.brand,
-            size: 20,
-          ),
+         // tab(InviteFrequency.frequently, 'Frequently', last: true),
         ],
       ),
     );

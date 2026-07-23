@@ -112,8 +112,9 @@ class DemoData {
 
   static const flat = 'T 1 304';
   static const society = 'Charms Solitaire';
+  // Company address shown on the ticket screen.
   static const address =
-      'Kanawani Village, Indirapuram, Ghaziabad, Uttar Pradesh 201014';
+      'A-5, Sector 57 Rd, Block A, Sector 57, Noida, Uttar Pradesh 201020';
   static const host = 'Jitender Wadhawan';
 
   /// Frequent entries shown as avatars on the dashboard.
