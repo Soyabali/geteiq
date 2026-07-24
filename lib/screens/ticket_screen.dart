@@ -23,13 +23,22 @@ import '../widgets/brand_mark.dart';
 /// Uses the warmer ticket palette from the design so it reads as a distinct
 /// artefact rather than another app screen.
 class TicketScreen extends StatefulWidget {
-  const TicketScreen({super.key, required this.invite, this.qrCodeUrl});
+  const TicketScreen({
+    super.key,
+    required this.invite,
+    this.qrCodeUrl,
+    this.myQrCode,
+  });
 
   final Invite invite;
 
   /// QR image url returned by the create-invite API. When present we show this
   /// real image; otherwise we fall back to the locally generated QR.
   final String? qrCodeUrl;
+
+  /// The MyQRCode value from the API, shown below the "OR" divider.
+  /// Falls back to the invite's local code if not provided.
+  final String? myQrCode;
 
   @override
   State<TicketScreen> createState() => _TicketScreenState();
@@ -64,6 +73,14 @@ class _TicketScreenState extends State<TicketScreen> {
       widget.qrCodeUrl != null &&
       widget.qrCodeUrl!.isNotEmpty &&
       widget.qrCodeUrl != 'null';
+
+  /// Code shown below the OR divider: MyQRCode from the API when present,
+  /// otherwise the invite's local code.
+  String get _passCode {
+    final v = widget.myQrCode;
+    if (v != null && v.isNotEmpty && v != 'null') return v;
+    return widget.invite.code;
+  }
 
   /// Payload the guard's scanner reads.
   String get _qrPayload =>
@@ -259,7 +276,7 @@ class _TicketScreenState extends State<TicketScreen> {
                   const _OrDivider(),
                   const SizedBox(height: AppSpacing.xl),
 
-                  Center(child: _CodeChip(code: widget.invite.code)),
+                  Center(child: _CodeChip(code: _passCode)),
 
                   const SizedBox(height: AppSpacing.xxl),
                   Text(
@@ -268,12 +285,6 @@ class _TicketScreenState extends State<TicketScreen> {
                     style: t.titleSmall?.copyWith(color: AppColors.ticketInk),
                   ),
                   const SizedBox(height: AppSpacing.md),
-                  Text(
-                    '${DemoData.flat}, ${DemoData.society}',
-                    textAlign: TextAlign.center,
-                    style: t.titleSmall?.copyWith(color: AppColors.ticketInk),
-                  ),
-                  const SizedBox(height: AppSpacing.xs),
                   Text(
                     DemoData.address,
                     textAlign: TextAlign.center,

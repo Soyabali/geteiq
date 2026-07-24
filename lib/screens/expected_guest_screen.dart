@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
+
 import '../models/expected_guest.dart';
+import '../models/guard_visitor.dart';
+import '../services/VMSGaurdVisitorRequestList.dart';
 import '../theme/tokens.dart';
 import '../widgets/app_card.dart';
 import '../widgets/app_scaffold.dart';
@@ -8,8 +12,7 @@ import '../widgets/pill_search_field.dart';
 /// Guard-side "Expected Guests" screen.
 ///
 /// Search + 4 stage filters (Expected / Check-in / Meeting / Check-out) + a
-/// list of guest cards the guard can move through the flow with the three
-/// action buttons. Data is static for now (see [kExpectedGuestsDemo]).
+/// list of guest cards. Data comes from the VMSGaurdVisitorRequestList API.
 class ExpectedGuestScreen extends StatefulWidget {
   const ExpectedGuestScreen({super.key});
 
@@ -20,11 +23,90 @@ class ExpectedGuestScreen extends StatefulWidget {
 class _ExpectedGuestScreenState extends State<ExpectedGuestScreen> {
   final _search = TextEditingController();
 
-  // Own mutable copy so tapping an action can change a guest's stage.
-  late final List<ExpectedGuest> _all = List.of(kExpectedGuestsDemo);
+  // Loaded from the API; kept mutable so the action buttons can change a
+  // guest's stage locally.
+  List<ExpectedGuest> _all = [];
+  bool _loading = true; // spinner while the API call runs
+  bool _error = false; // network / server error
 
   // null = show all; otherwise only guests in this stage.
   GuestStage? _stageFilter;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  // Calls the API and maps the response into the UI model.
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = false;
+    });
+    try {
+      final list = await GuardVisitorRepo().getVisitorList(context);
+      if (!mounted) return;
+      setState(() {
+        _all = list.map(_mapToExpected).toList();
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = true;
+      });
+    }
+  }
+
+  // Maps one API row -> the card's UI model.
+  ExpectedGuest _mapToExpected(GuardVisitor v) {
+    // sGuestNames may be a comma list -> show "(names)" + a "+N" badge.
+    final names = v.guestNames
+        .split(',')
+        .map((s) => s.trim())
+        .where((s) => s.isNotEmpty)
+        .toList();
+    final plus = names.length > 1 ? names.length - 1 : 0;
+
+    return ExpectedGuest(
+      name: v.userName, // sUserName -> card name
+      plus: plus,
+      people: v.guestNames, // sGuestNames -> shown in ( )
+      // phone: not returned by this API -> left empty. // TODO: change if added
+      when: _formatWhen(v.date, v.time), // dDate + dTime
+      duration: v.validHours.isEmpty ? '—' : v.validHours, // iValidHours
+      note: v.note.isEmpty ? '—' : v.note, // sNote
+      stage: _stageFromStatus(v.status), // sStatus -> stage
+      // approval: API has no approval field -> keeps default 'APPROVED'.
+      // TODO: change to a real approval value when the API provides one.
+    );
+  }
+
+  // "2026-07-24" + "18:00:00" -> "24 Jul 2026 · 6:00 PM"
+  String _formatWhen(String date, String time) {
+    try {
+      final dt = DateTime.parse('$date $time');
+      return DateFormat('d MMM yyyy · h:mm a').format(dt);
+    } catch (_) {
+      return '$date $time'.trim();
+    }
+  }
+
+  // sStatus text -> GuestStage (drives the highlighted action button + counts).
+  GuestStage _stageFromStatus(String status) {
+    final s = status.toLowerCase();
+    if (s.contains('checkout') || s.contains('check-out') || s.contains('check out')) {
+      return GuestStage.checkout;
+    }
+    if (s.contains('checkin') || s.contains('check-in') || s.contains('check in')) {
+      return GuestStage.checkin;
+    }
+    if (s.contains('meeting')) return GuestStage.meeting;
+    // "Pending" / anything else -> expected.
+    return GuestStage.expected;
+  }
 
   @override
   void dispose() {
@@ -74,7 +156,13 @@ class _ExpectedGuestScreenState extends State<ExpectedGuestScreen> {
       ),
       body: SafeArea(
         bottom: false,
-        child: CenteredFill(
+        child: _loading
+            ? const Center(
+                child: CircularProgressIndicator(color: AppColors.brand),
+              )
+            : _error
+            ? _ErrorState(onRetry: _load)
+            : CenteredFill(
           child: Column(
             children: [
               // Search
@@ -475,6 +563,44 @@ class _ActBtn extends StatelessWidget {
               ),
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Network / server error state with a retry button.
+class _ErrorState extends StatelessWidget {
+  const _ErrorState({required this.onRetry});
+
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context).textTheme;
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.xxxl),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.wifi_off_rounded, size: 44, color: AppColors.faint),
+            const SizedBox(height: AppSpacing.md),
+            Text(
+              "Couldn't load the visitor list.",
+              style: t.bodyMedium,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            TextButton(
+              onPressed: onRetry,
+              style: TextButton.styleFrom(
+                foregroundColor: AppColors.brand,
+                textStyle: t.titleSmall,
+              ),
+              child: const Text('Retry'),
+            ),
+          ],
         ),
       ),
     );

@@ -81,18 +81,21 @@ class _InviteDetailsScreenState extends State<InviteDetailsScreen> {
       final result = "${response['Result']}";
       final msg = "${response['Msg']}";
       final qrCode = "${response['QRCode']}"; // image url of the QR
-
+      final myQrCode = "${response['MyQRCode']}"; // code shown below the OR
       if (result == "1") {
         // SUCCESS -> show the message as a toast...
         ScaffoldMessenger.of(context)
           ..hideCurrentSnackBar()
           ..showSnackBar(SnackBar(content: Text(msg)));
 
-        // ...and carry the QRCode url to the ticket screen.
+        // ...and carry the QRCode url + MyQRCode to the ticket screen.
         Navigator.of(context).push(
           MaterialPageRoute<void>(
-            builder: (_) =>
-                TicketScreen(invite: widget.invite, qrCodeUrl: qrCode),
+            builder: (_) => TicketScreen(
+              invite: widget.invite,
+              qrCodeUrl: qrCode,
+              myQrCode: myQrCode,
+            ),
           ),
         );
       } else {

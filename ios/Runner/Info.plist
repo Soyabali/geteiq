@@ -5,6 +5,9 @@
     <!-- Shown in the iOS popup when we ask to read contacts. -->
     <key>NSContactsUsageDescription</key>
     <string>Allow access to your contacts to quickly pick and invite guests.</string>
+    <!-- Shown in the iOS popup when the guard scans a visitor QR pass. -->
+    <key>NSCameraUsageDescription</key>
+    <string>Camera access is needed to scan the visitor QR pass at the gate.</string>
     <key>FirebaseMessagingAutoInitEnabled</key>
     <true/>
     <key>CADisableMinimumFrameDurationOnPhone</key>

@@ -1,19 +1,21 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../data/demo_data.dart';
 import '../models/invite.dart';
 import '../theme/tokens.dart';
 import '../widgets/app_button.dart';
 import '../widgets/app_card.dart';
 import '../widgets/app_scaffold.dart';
+import '../widgets/company_carousel.dart';
 import 'expected_guest_screen.dart';
 import 'guard_invite_screen.dart';
 import 'invite_setup_sheet.dart';
 import 'invite_guest_list_screen.dart';
 import 'invited_by_guard_screen.dart';
+import 'login_screen.dart';
 import 'month_guest_report_screen.dart';
+import 'notification_screen.dart';
+import 'scan_visitor_screen.dart';
 import 'yesterday_guest_list_screen.dart';
 
 /// Screen 4 — home. Sponsored slot, four entry points, and the primary
@@ -27,6 +29,8 @@ class DashboardScreen extends StatelessWidget {
 
     return Scaffold(
       backgroundColor: AppColors.canvas,
+      // Right-side drawer opened by tapping the profile avatar.
+      endDrawer: const _AppDrawer(),
       body: SafeArea(
         bottom: false,
         child: CenteredFill(
@@ -46,8 +50,10 @@ class DashboardScreen extends StatelessWidget {
               ),
               SliverPadding(
                 padding: EdgeInsets.symmetric(horizontal: gutter),
-                sliver: const SliverToBoxAdapter(child: _SponsoredBanner()),
+                sliver: const SliverToBoxAdapter(child: CompanyCarousel()),
               ),
+              // Guard-only "Scan Visitor QR Pass" button (hidden for managers).
+              const SliverToBoxAdapter(child: _ScanPassBar()),
               SliverPadding(
                 padding: EdgeInsets.fromLTRB(
                   gutter,
@@ -66,6 +72,195 @@ class DashboardScreen extends StatelessWidget {
   }
 }
 
+/// Guard-only "Scan Visitor QR Pass" bar. Reads iUserType from prefs and only
+/// renders when the user is a guard (iUserType == "1"); managers see nothing.
+class _ScanPassBar extends StatefulWidget {
+  const _ScanPassBar();
+
+  @override
+  State<_ScanPassBar> createState() => _ScanPassBarState();
+}
+
+class _ScanPassBarState extends State<_ScanPassBar> {
+  bool _isGuard = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final prefs = await SharedPreferences.getInstance();
+    final iUserType = (prefs.getString('iUserType') ?? '').trim();
+    if (!mounted) return;
+    setState(() => _isGuard = iUserType == "1");
+  }
+
+  void _openScanner(BuildContext context) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => const ScanVisitorScreen()),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Managers (or before prefs load) -> nothing, no extra space.
+    if (!_isGuard) return const SizedBox.shrink();
+
+    final gutter = AppSpacing.gutter(context);
+
+    return Padding(
+      padding: EdgeInsets.fromLTRB(gutter, AppSpacing.lg, gutter, 0),
+      child: Material(
+        color: const Color(0xFF1F3A8A), // deep blue, like the mock
+        borderRadius: BorderRadius.circular(AppRadii.xl),
+        child: InkWell(
+          onTap: () => _openScanner(context),
+          borderRadius: BorderRadius.circular(AppRadii.xl),
+          child: Container(
+            height: 56,
+            alignment: Alignment.center,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(
+                  Icons.qr_code_scanner_rounded,
+                  color: Colors.white,
+                  size: 22,
+                ),
+                const SizedBox(width: AppSpacing.md),
+                Text(
+                  'SCAN VISITOR QR PASS',
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.6,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Right-side drawer with the logged-in user's name and a single Logout action.
+class _AppDrawer extends StatefulWidget {
+  const _AppDrawer();
+
+  @override
+  State<_AppDrawer> createState() => _AppDrawerState();
+}
+
+class _AppDrawerState extends State<_AppDrawer> {
+  String _name = '';
+  String _contact = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUser();
+  }
+
+  Future<void> _loadUser() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
+    setState(() {
+      _name = prefs.getString('sUserName') ?? '';
+      _contact = prefs.getString('sContactNo') ?? '';
+    });
+  }
+
+  Future<void> _logout(BuildContext context) async {
+    // Clear every stored value (login state, user info, etc.).
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.clear();
+    if (!context.mounted) return;
+
+    // Go to the login screen and drop the whole back stack.
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute<void>(builder: (_) => const LoginScreen()),
+      (route) => false,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context).textTheme;
+
+    return Drawer(
+      backgroundColor: AppColors.surface,
+      child: SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header: avatar + name + contact.
+            Padding(
+              padding: const EdgeInsets.all(AppSpacing.xl),
+              child: Row(
+                children: [
+                  Container(
+                    width: 48,
+                    height: 48,
+                    decoration: const BoxDecoration(
+                      gradient: AppColors.brandGradientDeep,
+                      shape: BoxShape.circle,
+                    ),
+                    alignment: Alignment.center,
+                    child: Icon(
+                      Icons.person_rounded,
+                      color: Colors.white,
+                      size: 26,
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.md),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          _name.isEmpty ? 'Account' : _name,
+                          style: t.titleMedium,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        if (_contact.isNotEmpty) ...[
+                          const SizedBox(height: 2),
+                          Text(
+                            _contact,
+                            style: t.bodySmall?.copyWith(color: AppColors.muted),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 1),
+
+            // Logout — the only option.
+            ListTile(
+              leading: const Icon(Icons.logout_rounded, color: AppColors.brand),
+              title: Text(
+                'Logout',
+                style: t.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+              ),
+              onTap: () => _logout(context),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _DashboardHeader extends StatelessWidget {
   const _DashboardHeader();
 
@@ -74,55 +269,36 @@ class _DashboardHeader extends StatelessWidget {
     final t = Theme.of(context).textTheme;
     return Row(
       children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Row(
-                children: [
-                  Flexible(
-                    child: Text(
-                      DemoData.flat,
-                      style: t.titleLarge?.copyWith(fontSize: 21),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  const SizedBox(width: AppSpacing.xs),
-                  const Icon(
-                    Icons.keyboard_arrow_down_rounded,
-                    size: 20,
-                    color: AppColors.ink,
-                  ),
-                ],
-              ),
-              Text(
-                DemoData.society,
-                style: t.bodySmall,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ],
-          ),
-        ),
-        const _IconAction(icon: Icons.search_rounded, tooltip: 'Search'),
-        const SizedBox(width: AppSpacing.xs),
-        const _IconAction(
+        const Spacer(),
+        // Bell -> opens the Notifications screen with a slow transition.
+        _IconAction(
           icon: Icons.notifications_none_rounded,
           tooltip: 'Notifications',
+          onTap: () => Navigator.of(context).push(NotificationScreen.route()),
         ),
         const SizedBox(width: AppSpacing.sm),
-        // Profile avatar.
-        Container(
-          width: 38,
-          height: 38,
-          decoration: const BoxDecoration(
-            gradient: AppColors.brandGradientDeep,
-            shape: BoxShape.circle,
-          ),
-          alignment: Alignment.center,
-          child: Text(
-            'JW',
-            style: t.titleSmall?.copyWith(color: Colors.white, fontSize: 13.5),
+        // Profile avatar — tap to open the right-side drawer (Logout).
+        // Builder gives a context under the Scaffold so openEndDrawer works.
+        Builder(
+          builder: (context) => GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => Scaffold.of(context).openEndDrawer(),
+            child: Container(
+              width: 38,
+              height: 38,
+              decoration: const BoxDecoration(
+                gradient: AppColors.brandGradientDeep,
+                shape: BoxShape.circle,
+              ),
+              alignment: Alignment.center,
+              child: Text(
+                'JW',
+                style: t.titleSmall?.copyWith(
+                  color: Colors.white,
+                  fontSize: 13.5,
+                ),
+              ),
+            ),
           ),
         ),
       ],
@@ -131,10 +307,15 @@ class _DashboardHeader extends StatelessWidget {
 }
 
 class _IconAction extends StatelessWidget {
-  const _IconAction({required this.icon, required this.tooltip});
+  const _IconAction({
+    required this.icon,
+    required this.tooltip,
+    this.onTap,
+  });
 
   final IconData icon;
   final String tooltip;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -142,87 +323,7 @@ class _IconAction extends StatelessWidget {
       icon: Icon(icon, color: AppColors.ink, size: 23),
       tooltip: tooltip,
       visualDensity: VisualDensity.compact,
-      onPressed: () {},
-    );
-  }
-}
-
-/// Gradient promo card with an Unsplash photo underlay.
-class _SponsoredBanner extends StatelessWidget {
-  const _SponsoredBanner();
-
-  @override
-  Widget build(BuildContext context) {
-    final t = Theme.of(context).textTheme;
-
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(AppRadii.xl),
-      child: Stack(
-        fit: StackFit.passthrough,
-        children: [
-          // Photo layer — a failure here simply reveals the gradient below.
-          Positioned.fill(
-            child: CachedNetworkImage(
-              imageUrl: DemoData.bannerImage,
-              fit: BoxFit.cover,
-              fadeInDuration: const Duration(milliseconds: 350),
-              placeholder: (_, __) => const ColoredBox(color: AppColors.brand),
-              errorWidget: (_, __, ___) =>
-                  const ColoredBox(color: AppColors.brand),
-            ),
-          ),
-          // Gradient scrim keeps the copy legible over any photo.
-          Positioned.fill(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.centerLeft,
-                  end: Alignment.centerRight,
-                  colors: [
-                    AppColors.brand.withValues(alpha: 0.97),
-                    AppColors.brand.withValues(alpha: 0.72),
-                  ],
-                ),
-              ),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.all(AppSpacing.xl),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const TagChip(label: 'SPONSORED'),
-                const SizedBox(height: AppSpacing.md),
-                Text(
-                  'Festive move-in offers\nat ${DemoData.society}',
-                  style: t.titleLarge?.copyWith(
-                    color: Colors.white,
-                    fontSize: 20,
-                    height: 1.3,
-                  ),
-                ),
-                const SizedBox(height: AppSpacing.md),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      'Learn more',
-                      style: t.titleSmall?.copyWith(color: Colors.white),
-                    ),
-                    const SizedBox(width: AppSpacing.xs),
-                    const Icon(
-                      Icons.arrow_forward_rounded,
-                      color: Colors.white,
-                      size: 17,
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
+      onPressed: onTap ?? () {},
     );
   }
 }
