@@ -176,143 +176,161 @@ class _TicketScreenState extends State<TicketScreen> {
       ),
       body: SafeArea(
         bottom: false,
-        child: CenteredFill(
-          // Everything inside this boundary is what gets captured and shared.
-          child: RepaintBoundary(
-            key: _shareKey,
-            child: Container(
-              color: AppColors.ticketBg,
-              child: ListView(
-                padding: EdgeInsets.fromLTRB(
-                  gutter,
-                  AppSpacing.lg,
-                  gutter,
-                  AppSpacing.xxl,
-                ),
-                physics: const BouncingScrollPhysics(
-                  parent: AlwaysScrollableScrollPhysics(),
-                ),
-                children: [
-                  Text(
-                    '$_hostName has invited you.',
-                    textAlign: TextAlign.center,
-                    style: t.headlineSmall?.copyWith(
-                      color: AppColors.ticketInk,
-                      height: 1.3,
-                    ),
-                  ),
-                  if (widget.invite.note.isNotEmpty) ...[
-                    const SizedBox(height: AppSpacing.md),
-                    Text(
-                      '"${widget.invite.note}"',
-                      textAlign: TextAlign.center,
-                      style: t.bodyLarge?.copyWith(
-                        color: AppColors.ticketMuted,
-                        fontStyle: FontStyle.italic,
+        child: Column(
+          children: [
+            Expanded(
+              child: CenteredFill(
+                // Everything inside this boundary is what gets captured and shared.
+                child: RepaintBoundary(
+                  key: _shareKey,
+                  child: Container(
+                    color: AppColors.ticketBg,
+                    child: ListView(
+                      padding: EdgeInsets.fromLTRB(
+                        gutter,
+                        AppSpacing.lg,
+                        gutter,
+                        AppSpacing.xxl,
                       ),
-                    ),
-                  ],
-                  const SizedBox(height: AppSpacing.xl),
-                  Text(
-                    'Show this QR code or OTP to the guard at gate',
-                    textAlign: TextAlign.center,
-                    style: t.bodySmall?.copyWith(color: AppColors.ticketMuted),
-                  ),
-                  const SizedBox(height: AppSpacing.xl),
+                      physics: const BouncingScrollPhysics(
+                        parent: AlwaysScrollableScrollPhysics(),
+                      ),
+                      children: [
+                        Text(
+                          '$_hostName has invited you.',
+                          textAlign: TextAlign.center,
+                          style: t.headlineSmall?.copyWith(
+                            color: AppColors.ticketInk,
+                            height: 1.3,
+                          ),
+                        ),
+                        const SizedBox(height: AppSpacing.xl),
+                        Text(
+                          'Show this QR code or OTP to the guard at gate',
+                          textAlign: TextAlign.center,
+                          style: t.bodySmall?.copyWith(
+                            color: AppColors.ticketMuted,
+                          ),
+                        ),
+                        const SizedBox(height: AppSpacing.xl),
 
-                  Center(
-                    child: Container(
-                      padding: const EdgeInsets.all(AppSpacing.lg),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(AppRadii.xl),
-                        boxShadow: AppShadows.card,
-                      ),
-                      // Show the QR image from the API if we have it, otherwise
-                      // fall back to the locally generated QR code.
-                      child: _hasQrUrl
-                          ? CachedNetworkImage(
-                              imageUrl: widget.qrCodeUrl!,
-                              width: qrSize,
-                              height: qrSize,
-                              fit: BoxFit.contain,
-                              placeholder: (_, __) => SizedBox(
-                                width: qrSize,
-                                height: qrSize,
-                                child: const Center(
-                                  child: CircularProgressIndicator(
-                                    color: AppColors.ticketInk,
+                        Center(
+                          child: Container(
+                            padding: const EdgeInsets.all(AppSpacing.lg),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(AppRadii.xl),
+                              boxShadow: AppShadows.card,
+                            ),
+                            // Show the QR image from the API if we have it, otherwise
+                            // fall back to the locally generated QR code.
+                            child: _hasQrUrl
+                                ? CachedNetworkImage(
+                                    imageUrl: widget.qrCodeUrl!,
+                                    width: qrSize,
+                                    height: qrSize,
+                                    fit: BoxFit.contain,
+                                    placeholder: (_, __) => SizedBox(
+                                      width: qrSize,
+                                      height: qrSize,
+                                      child: const Center(
+                                        child: CircularProgressIndicator(
+                                          color: AppColors.ticketInk,
+                                        ),
+                                      ),
+                                    ),
+                                    errorWidget: (_, __, ___) => SizedBox(
+                                      width: qrSize,
+                                      height: qrSize,
+                                      child: const Icon(
+                                        Icons.qr_code_2_rounded,
+                                        size: 80,
+                                        color: AppColors.ticketInk,
+                                      ),
+                                    ),
+                                  )
+                                : QrImageView(
+                                    data: _qrPayload,
+                                    version: QrVersions.auto,
+                                    size: qrSize,
+                                    backgroundColor: Colors.white,
+                                    eyeStyle: const QrEyeStyle(
+                                      eyeShape: QrEyeShape.square,
+                                      color: AppColors.ticketInk,
+                                    ),
+                                    dataModuleStyle: const QrDataModuleStyle(
+                                      dataModuleShape: QrDataModuleShape.square,
+                                      color: AppColors.ticketInk,
+                                    ),
                                   ),
-                                ),
-                              ),
-                              errorWidget: (_, __, ___) => SizedBox(
-                                width: qrSize,
-                                height: qrSize,
-                                child: const Icon(
-                                  Icons.qr_code_2_rounded,
-                                  size: 80,
-                                  color: AppColors.ticketInk,
-                                ),
-                              ),
-                            )
-                          : QrImageView(
-                              data: _qrPayload,
-                              version: QrVersions.auto,
-                              size: qrSize,
-                              backgroundColor: Colors.white,
-                              eyeStyle: const QrEyeStyle(
-                                eyeShape: QrEyeShape.square,
-                                color: AppColors.ticketInk,
-                              ),
-                              dataModuleStyle: const QrDataModuleStyle(
-                                dataModuleShape: QrDataModuleShape.square,
+                          ),
+                        ),
+
+                        const SizedBox(height: AppSpacing.xl),
+                        const _OrDivider(),
+                        const SizedBox(height: AppSpacing.xl),
+
+                        Center(child: _CodeChip(code: _passCode)),
+
+                        const SizedBox(height: AppSpacing.xxl),
+                        Text(
+                          _window,
+                          textAlign: TextAlign.center,
+                          style: t.titleSmall?.copyWith(
+                            color: AppColors.ticketInk,
+                          ),
+                        ),
+                        const SizedBox(height: AppSpacing.md),
+                        Text(
+                          DemoData.address,
+                          textAlign: TextAlign.center,
+                          style: t.bodySmall?.copyWith(
+                            color: AppColors.ticketMuted,
+                            height: 1.5,
+                          ),
+                        ),
+
+                        // to give a share contenter card
+                        const SizedBox(height: AppSpacing.xxl),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const BrandMark(size: 26),
+                            const SizedBox(width: AppSpacing.sm),
+                            Text(
+                              'gateIQ',
+                              style: t.titleMedium?.copyWith(
                                 color: AppColors.ticketInk,
                               ),
                             ),
-                    ),
-                  ),
-
-                  const SizedBox(height: AppSpacing.xl),
-                  const _OrDivider(),
-                  const SizedBox(height: AppSpacing.xl),
-
-                  Center(child: _CodeChip(code: _passCode)),
-
-                  const SizedBox(height: AppSpacing.xxl),
-                  Text(
-                    _window,
-                    textAlign: TextAlign.center,
-                    style: t.titleSmall?.copyWith(color: AppColors.ticketInk),
-                  ),
-                  const SizedBox(height: AppSpacing.md),
-                  Text(
-                    DemoData.address,
-                    textAlign: TextAlign.center,
-                    style: t.bodySmall?.copyWith(
-                      color: AppColors.ticketMuted,
-                      height: 1.5,
-                    ),
-                  ),
-
-                  const SizedBox(height: AppSpacing.xxl),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const BrandMark(size: 26),
-                      const SizedBox(width: AppSpacing.sm),
-                      Text(
-                        'gateIQ',
-                        style: t.titleMedium?.copyWith(
-                          color: AppColors.ticketInk,
+                          ],
                         ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: AppSpacing.xxl),
-                ],
-              ), // ListView
-            ), // Container
-          ), // RepaintBoundary
+                        const SizedBox(height: AppSpacing.xxl),
+                      ],
+                    ), // ListView
+                  ), // Container
+                ), // RepaintBoundary
+              ), // CenteredFill
+            ), // Expanded
+            // Share button — same look & feel as the "Done" button below.
+            // Kept outside the RepaintBoundary so it never appears in the shot.
+            Padding(
+              padding: EdgeInsets.fromLTRB(
+                gutter,
+                AppSpacing.sm,
+                gutter,
+                0,
+              ),
+              child: CenteredBar(
+                child: PrimaryButton(
+                  label: 'Share Invite',
+                  loading: _sharing,
+                  trailing: Icons.ios_share_rounded,
+                  onPressed: _sharing ? null : _shareTicket,
+                ),
+              ),
+            ),
+          ],
         ),
       ),
       bottomNavigationBar: Container(

@@ -67,22 +67,6 @@ const List<_CarouselSlide> _slides = [
     accent: Color(0xFFF97316),
     img: 'https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=900&q=80',
   ),
-  _CarouselSlide(
-    number: '06',
-    tag: 'IoT',
-    title: 'Networking & IoT Solutions',
-    sub: 'Devices that talk. Gates that listen.',
-    accent: Color(0xFFD946EF),
-    img: 'https://images.unsplash.com/photo-1544197150-b99a580b7e8f?w=900&q=80',
-  ),
-  _CarouselSlide(
-    number: '07',
-    tag: 'GIS',
-    title: 'GIS Smart Mapping',
-    sub: 'Map every zone of your community',
-    accent: Color(0xFFF59E0B),
-    img: 'https://images.unsplash.com/photo-1477959858617-67f85b3d74e5?w=900&q=80',
-  ),
 ];
 
 /// Auto-playing company carousel for the top of the dashboard.

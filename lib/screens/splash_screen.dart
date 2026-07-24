@@ -2,11 +2,12 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:lottie/lottie.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../theme/tokens.dart';
 import '../widgets/brand_mark.dart';
+import 'dashboard_screen.dart';
 import 'login_screen.dart';
-import 'role_select_screen.dart';
 
 /// Screen 1 — brand moment.
 ///
@@ -42,13 +43,22 @@ class _SplashScreenState extends State<SplashScreen>
     super.dispose();
   }
 
-  void _advance() {
+  Future<void> _advance() async {
     if (_leaving || !mounted) return;
     _leaving = true;
+
+    // If the user logged in before, skip login and go straight to the
+    // dashboard. Otherwise show the login screen.
+    final prefs = await SharedPreferences.getInstance();
+    final loggedIn = prefs.getBool('isLoggedIn') ?? false;
+    if (!mounted) return;
+
+    final Widget next = loggedIn ? const DashboardScreen() : LoginScreen();
+
     Navigator.of(context).pushReplacement(
       PageRouteBuilder(
         transitionDuration: const Duration(milliseconds: 420),
-        pageBuilder: (_, __, ___) => LoginScreen(),
+        pageBuilder: (_, __, ___) => next,
         transitionsBuilder: (_, animation, __, child) {
           final curved = CurvedAnimation(
             parent: animation,

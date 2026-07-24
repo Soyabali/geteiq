@@ -7,6 +7,7 @@ import '../widgets/app_button.dart';
 import '../widgets/app_card.dart';
 import '../widgets/app_scaffold.dart';
 import '../widgets/company_carousel.dart';
+import '../widgets/logout_dialog.dart';
 import 'expected_guest_screen.dart';
 import 'guard_invite_screen.dart';
 import 'invite_setup_sheet.dart';
@@ -29,8 +30,6 @@ class DashboardScreen extends StatelessWidget {
 
     return Scaffold(
       backgroundColor: AppColors.canvas,
-      // Right-side drawer opened by tapping the profile avatar.
-      endDrawer: const _AppDrawer(),
       body: SafeArea(
         bottom: false,
         child: CenteredFill(
@@ -52,8 +51,6 @@ class DashboardScreen extends StatelessWidget {
                 padding: EdgeInsets.symmetric(horizontal: gutter),
                 sliver: const SliverToBoxAdapter(child: CompanyCarousel()),
               ),
-              // Guard-only "Scan Visitor QR Pass" button (hidden for managers).
-              const SliverToBoxAdapter(child: _ScanPassBar()),
               SliverPadding(
                 padding: EdgeInsets.fromLTRB(
                   gutter,
@@ -72,17 +69,16 @@ class DashboardScreen extends StatelessWidget {
   }
 }
 
-/// Guard-only "Scan Visitor QR Pass" bar. Reads iUserType from prefs and only
-/// renders when the user is a guard (iUserType == "1"); managers see nothing.
-class _ScanPassBar extends StatefulWidget {
-  const _ScanPassBar();
+class _DashboardHeader extends StatefulWidget {
+  const _DashboardHeader();
 
   @override
-  State<_ScanPassBar> createState() => _ScanPassBarState();
+  State<_DashboardHeader> createState() => _DashboardHeaderState();
 }
 
-class _ScanPassBarState extends State<_ScanPassBar> {
-  bool _isGuard = false;
+class _DashboardHeaderState extends State<_DashboardHeader> {
+  String _name = ''; // sUserName from login
+  bool _isGuard = false; // iUserType == "1"
 
   @override
   void initState() {
@@ -92,95 +88,21 @@ class _ScanPassBarState extends State<_ScanPassBar> {
 
   Future<void> _load() async {
     final prefs = await SharedPreferences.getInstance();
-    final iUserType = (prefs.getString('iUserType') ?? '').trim();
-    if (!mounted) return;
-    setState(() => _isGuard = iUserType == "1");
-  }
-
-  void _openScanner(BuildContext context) {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => const ScanVisitorScreen()),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    // Managers (or before prefs load) -> nothing, no extra space.
-    if (!_isGuard) return const SizedBox.shrink();
-
-    final gutter = AppSpacing.gutter(context);
-
-    return Padding(
-      padding: EdgeInsets.fromLTRB(gutter, AppSpacing.lg, gutter, 0),
-      child: Material(
-        color: const Color(0xFF1F3A8A), // deep blue, like the mock
-        borderRadius: BorderRadius.circular(AppRadii.xl),
-        child: InkWell(
-          onTap: () => _openScanner(context),
-          borderRadius: BorderRadius.circular(AppRadii.xl),
-          child: Container(
-            height: 56,
-            alignment: Alignment.center,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(
-                  Icons.qr_code_scanner_rounded,
-                  color: Colors.white,
-                  size: 22,
-                ),
-                const SizedBox(width: AppSpacing.md),
-                Text(
-                  'SCAN VISITOR QR PASS',
-                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.6,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Right-side drawer with the logged-in user's name and a single Logout action.
-class _AppDrawer extends StatefulWidget {
-  const _AppDrawer();
-
-  @override
-  State<_AppDrawer> createState() => _AppDrawerState();
-}
-
-class _AppDrawerState extends State<_AppDrawer> {
-  String _name = '';
-  String _contact = '';
-
-  @override
-  void initState() {
-    super.initState();
-    _loadUser();
-  }
-
-  Future<void> _loadUser() async {
-    final prefs = await SharedPreferences.getInstance();
     if (!mounted) return;
     setState(() {
-      _name = prefs.getString('sUserName') ?? '';
-      _contact = prefs.getString('sContactNo') ?? '';
+      _name = (prefs.getString('sUserName') ?? '').trim();
+      _isGuard = (prefs.getString('iUserType') ?? '').trim() == "1";
     });
   }
 
-  Future<void> _logout(BuildContext context) async {
-    // Clear every stored value (login state, user info, etc.).
+  // Logout icon tapped -> confirm, then clear prefs and go to login.
+  Future<void> _onLogoutTap(BuildContext context) async {
+    final confirmed = await showLogoutDialog(context);
+    if (confirmed != true || !context.mounted) return;
+
     final prefs = await SharedPreferences.getInstance();
     await prefs.clear();
     if (!context.mounted) return;
-
-    // Go to the login screen and drop the whole back stack.
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute<void>(builder: (_) => const LoginScreen()),
       (route) => false,
@@ -190,118 +112,83 @@ class _AppDrawerState extends State<_AppDrawer> {
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context).textTheme;
+    // Guard vs management group label shown below the login name.
+    final groupLabel = _isGuard ? 'Guard Group' : 'Mgmt Group';
 
-    return Drawer(
-      backgroundColor: AppColors.surface,
-      child: SafeArea(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Header: avatar + name + contact.
-            Padding(
-              padding: const EdgeInsets.all(AppSpacing.xl),
-              child: Row(
-                children: [
-                  Container(
-                    width: 48,
-                    height: 48,
-                    decoration: const BoxDecoration(
-                      gradient: AppColors.brandGradientDeep,
-                      shape: BoxShape.circle,
-                    ),
-                    alignment: Alignment.center,
-                    child: Icon(
-                      Icons.person_rounded,
-                      color: Colors.white,
-                      size: 26,
-                    ),
-                  ),
-                  const SizedBox(width: AppSpacing.md),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          _name.isEmpty ? 'Account' : _name,
-                          style: t.titleMedium,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        if (_contact.isNotEmpty) ...[
-                          const SizedBox(height: 2),
-                          Text(
-                            _contact,
-                            style: t.bodySmall?.copyWith(color: AppColors.muted),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const Divider(height: 1),
-
-            // Logout — the only option.
-            ListTile(
-              leading: const Icon(Icons.logout_rounded, color: AppColors.brand),
-              title: Text(
-                'Logout',
-                style: t.titleMedium?.copyWith(fontWeight: FontWeight.w600),
-              ),
-              onTap: () => _logout(context),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _DashboardHeader extends StatelessWidget {
-  const _DashboardHeader();
-
-  @override
-  Widget build(BuildContext context) {
-    final t = Theme.of(context).textTheme;
     return Row(
       children: [
-        const Spacer(),
+        // Left: login name + Guard/Mgmt group.
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                _name.isEmpty ? 'Welcome' : _name,
+                style: t.titleLarge?.copyWith(fontSize: 21),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 2),
+              Text(
+                groupLabel,
+                style: t.bodySmall?.copyWith(color: AppColors.muted),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ),
+        ),
         // Bell -> opens the Notifications screen with a slow transition.
         _IconAction(
           icon: Icons.notifications_none_rounded,
           tooltip: 'Notifications',
           onTap: () => Navigator.of(context).push(NotificationScreen.route()),
         ),
-        const SizedBox(width: AppSpacing.sm),
-        // Profile avatar — tap to open the right-side drawer (Logout).
-        // Builder gives a context under the Scaffold so openEndDrawer works.
-        Builder(
-          builder: (context) => GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: () => Scaffold.of(context).openEndDrawer(),
-            child: Container(
-              width: 38,
-              height: 38,
-              decoration: const BoxDecoration(
-                gradient: AppColors.brandGradientDeep,
-                shape: BoxShape.circle,
-              ),
-              alignment: Alignment.center,
-              child: Text(
-                'JW',
-                style: t.titleSmall?.copyWith(
-                  color: Colors.white,
-                  fontSize: 13.5,
-                ),
+        // Guard-only: scan the visitor QR pass (opens the camera scanner).
+        if (_isGuard)
+          _IconAction(
+            icon: Icons.qr_code_scanner_rounded,
+            tooltip: 'Scan Visitor QR Pass',
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => const ScanVisitorScreen(),
               ),
             ),
           ),
-        ),
+        const SizedBox(width: AppSpacing.sm),
+        // Logout icon — iOS-style tinted circle. Tap -> confirm dialog.
+        _LogoutIconButton(onTap: () => _onLogoutTap(context)),
       ],
+    );
+  }
+}
+
+/// A soft, tinted circular logout button with comfortable iOS-style padding.
+class _LogoutIconButton extends StatelessWidget {
+  const _LogoutIconButton({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppColors.brandTint,
+      shape: const CircleBorder(),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        splashColor: AppColors.brand.withValues(alpha: 0.18),
+        highlightColor: AppColors.brand.withValues(alpha: 0.08),
+        child: const Padding(
+          padding: EdgeInsets.all(10),
+          child: Icon(
+            Icons.logout_rounded,
+            color: AppColors.brand,
+            size: 21,
+          ),
+        ),
+      ),
     );
   }
 }
