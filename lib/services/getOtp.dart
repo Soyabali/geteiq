@@ -29,7 +29,7 @@ class GetOtpRepo {
       var getOtpApi = "$baseURL$endPoint";
       print('------------17---getOtpApi---$getOtpApi');
 
-      showLoader();
+      //showLoader();
       var headers = {'Content-Type': 'application/json'};
       // var headers = {
       //   'token': '$sToken',

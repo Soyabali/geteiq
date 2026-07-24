@@ -91,26 +91,38 @@ class _LoginScreenState extends State<LoginScreen> {
 
   // FIRST API : VmsApiManagementGetOtp  (only sends the OTP)
   void getOtpResponse() async {
-    // _digits = clean 10-digit number (no spaces)
-    var getOtp = await GetOtpRepo().getOtp(context, _digits);
-    print("------getOtpResponse----------$getOtp");
-    if (!mounted) return;
+    try {
+      // _digits = clean 10-digit number (no spaces)
+      var getOtp = await GetOtpRepo().getOtp(context, _digits);
+      print("------getOtpResponse----------$getOtp");
+      if (!mounted) return;
 
-    var result = "${getOtp['Result']}";
-    var msg = "${getOtp['Msg']}";
+      var result = "${getOtp['Result']}";
+      var msg = "${getOtp['Msg']}";
 
-    if (result == "1") {
-      // OTP sent -> the OTP box is already visible, just tell the user.
+      if (result == "1") {
+        // OTP sent -> the OTP box is already visible, just tell the user.
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(
+            SnackBar(content: Text('OTP sent to +91 ${_formatted(_digits)}')),
+          );
+      } else {
+        // something went wrong -> show the api message
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(SnackBar(content: Text('$msg')));
+      }
+    } catch (e) {
+      // No internet / server down. The OTP box is already visible, so while
+      // testing offline you can still type 1982 and press Login.
+      print("------getOtp error----------$e");
+      if (!mounted) return;
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
         ..showSnackBar(
-          SnackBar(content: Text('OTP sent to +91 ${_formatted(_digits)}')),
+          const SnackBar(content: Text('Can\'t reach server. Use test OTP 1982.')),
         );
-    } else {
-      // something went wrong -> show the api message
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text('$msg')));
     }
   }
 
@@ -143,40 +155,53 @@ class _LoginScreenState extends State<LoginScreen> {
     // ===========================================================
     var phoneNumber = _digits;        // clean 10-digit number
 
-    // call the SECOND api -> validate the otp
-    var response = await ValidateOtpRepo().validateOtp(
-      context,
-      otpNumber,
-      phoneNumber,
-    );
-    print("------validateOtpResponse----------$response");
-    if (!mounted) return;
-    setState(() => _verifying = false);
-
-    var result = "${response['Result']}";
-    var msg = "${response['Msg']}";
-
-    if (result == "1") {
-      // success -> save the user detail in sharedPreference
-      SharedPreferences prefs = await SharedPreferences.getInstance();
-      await prefs.setString('sUserName', "${response['sUserName']}");
-      await prefs.setString('sContactNo', "${response['sContactNo']}");
-      await prefs.setString('iUserType', "${response['iUserType']}");
-      await prefs.setString('sEmailId', "${response['sEmailId']}");
-      await prefs.setBool('isLoggedIn', true);
+    try {
+      // call the SECOND api -> validate the otp
+      var response = await ValidateOtpRepo().validateOtp(
+        context,
+        otpNumber,
+        phoneNumber,
+      );
+      print("------validateOtpResponse----------$response");
       if (!mounted) return;
 
-      // go to the Dashboard
-      AppSession.signIn(widget.role);
-      Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute<void>(builder: (_) => const DashboardScreen()),
-        (route) => false,
-      );
-    } else {
-      // wrong otp / failed -> stay on screen and show the message
+      var result = "${response['Result']}";
+      var msg = "${response['Msg']}";
+
+      if (result == "1") {
+        // success -> save the user detail in sharedPreference
+        SharedPreferences prefs = await SharedPreferences.getInstance();
+        await prefs.setString('sUserName', "${response['sUserName']}");
+        await prefs.setString('sContactNo', "${response['sContactNo']}");
+        await prefs.setString('iUserType', "${response['iUserType']}");
+        await prefs.setString('sEmailId', "${response['sEmailId']}");
+        await prefs.setBool('isLoggedIn', true);
+        if (!mounted) return;
+
+        // go to the Dashboard
+        AppSession.signIn(widget.role);
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute<void>(builder: (_) => const DashboardScreen()),
+          (route) => false,
+        );
+      } else {
+        // wrong otp / failed -> stay on screen and show the message
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(SnackBar(content: Text('$msg')));
+      }
+    } catch (e) {
+      // network / server error -> show a message instead of hanging
+      print("------login error----------$e");
+      if (!mounted) return;
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text('$msg')));
+        ..showSnackBar(
+          const SnackBar(content: Text('Something went wrong. Please try again.')),
+        );
+    } finally {
+      // always reset the button, success or fail.
+      if (mounted) setState(() => _verifying = false);
     }
   }
 

@@ -27,7 +27,7 @@ class ValidateOtpRepo {
       var validateOtpApi = "$baseURL$endPoint";
       print('------------17---validateOtpApi---$validateOtpApi');
 
-      showLoader();
+      //showLoader();
       var headers = {'Content-Type': 'application/json'};
       // var headers = {
       //   'token': '$sToken',

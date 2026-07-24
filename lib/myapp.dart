@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_easyloading/flutter_easyloading.dart';
 
 import 'screens/splash_screen.dart';
 import 'services/notification_service.dart';
@@ -23,7 +24,10 @@ class MyApp extends StatelessWidget {
         ).clamp(minScaleFactor: 0.9, maxScaleFactor: 1.35);
         return MediaQuery(
           data: MediaQuery.of(context).copyWith(textScaler: scaler),
-          child: child!,
+          // FlutterEasyLoading must wrap the app so showLoader()/hideLoader()
+          // (EasyLoading.show/dismiss) actually render. Without this the loader
+          // throws and any api call using it fails silently.
+          child: FlutterEasyLoading(child: child),
         );
       },
     );

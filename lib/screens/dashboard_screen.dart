@@ -8,6 +8,7 @@ import '../theme/tokens.dart';
 import '../widgets/app_button.dart';
 import '../widgets/app_card.dart';
 import '../widgets/app_scaffold.dart';
+import 'expected_guest_screen.dart';
 import 'guard_invite_screen.dart';
 import 'invite_setup_sheet.dart';
 import 'invite_guest_list_screen.dart';
@@ -228,8 +229,34 @@ class _SponsoredBanner extends StatelessWidget {
 
 /// Four entry tiles. Switches to a single column on very narrow phones so
 /// the labels never clip.
-class _ActionGrid extends StatelessWidget {
+class _ActionGrid extends StatefulWidget {
   const _ActionGrid();
+
+  @override
+  State<_ActionGrid> createState() => _ActionGridState();
+}
+
+class _ActionGridState extends State<_ActionGrid> {
+  // User type saved at login time ('iUserType'). Decides the first card.
+  String _iUserType = '';
+
+  // Single source of truth so the LABEL and the SCREEN always match:
+  //   Guard    (iUserType == "1") -> "Today's List" + ExpectedGuestScreen
+  //   Manager  (otherwise, "2")   -> "My Invites"   + InviteGuestListScreen (no change)
+  bool get _isGuard => _iUserType == "1";
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserType();
+  }
+
+  Future<void> _loadUserType() async {
+    final prefs = await SharedPreferences.getInstance();
+    final value = (prefs.getString('iUserType') ?? '').trim();
+    if (!mounted) return;
+    setState(() => _iUserType = value);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -249,15 +276,16 @@ class _ActionGrid extends StatelessWidget {
     // from clipping under slightly different font rendering.
     final extent = fixed + textBlock + 8;
 
-    const tiles = [
-      (
-        Icons.person_add_alt_1_outlined,
-        'Invite guest list',
-        'People you invited',
-      ),
-      (Icons.verified_user_outlined, 'Invited by Guard', 'Guard entries'),
-      (Icons.access_time_rounded, 'Yesterday guest list', 'Past 24 hours'),
-      (Icons.calendar_month_outlined, 'Month guest Report', 'This month'),
+    // First card title depends on the logged-in user type:
+    //   Guard   (iUserType == "1") -> "Today's List"
+    //   Manager (otherwise)        -> "My Invites"
+    final firstTitle = _isGuard ? "Today's List" : 'My Invites';
+
+    final tiles = [
+      (Icons.person_add_alt_1_outlined, firstTitle, 'People you invited'),
+      (Icons.verified_user_outlined, 'Gate Log', 'Guard entries'),
+      (Icons.access_time_rounded, 'Yesterday', 'Past 24 hours'),
+      (Icons.calendar_month_outlined, 'Monthly', 'This month'),
     ];
 
     return SliverGrid(
@@ -282,23 +310,39 @@ class _ActionGrid extends StatelessWidget {
   /// Each entry tile opens its own list screen. They share one UI
   /// ([GuestListScreen]) but keep separate widgets + data sources, so each can
   /// be wired to a different REST endpoint independently.
-  void _openTile(BuildContext context, int index, String title) {
-    final Widget? screen = switch (index) {
-      0 => const InviteGuestListScreen(),
-      1 => const InvitedByGuardScreen(),
-      2 => const YesterdayGuestListScreen(),
-      3 => const MonthGuestReportScreen(),
-      _ => null,
-    };
+  Future<void> _openTile(BuildContext context, int index, String title) async {
+    Widget? screen;
 
-    if (screen == null) {
+    if (index == 0) {
+      // Read the FRESH user type from SharedPreferences at tap time (not the
+      // cached value), so the first card always routes by the real login value.
+      final prefs = await SharedPreferences.getInstance();
+      final iUserType = (prefs.getString('iUserType') ?? '').trim();
+      if (!context.mounted) return;
+
+      // Guard (iUserType == "1") -> Expected Guests screen
+      // Manager (otherwise, "2") -> existing Invite guest list (no change)
+      screen = iUserType == "1"
+          ? const ExpectedGuestScreen()
+          : const InviteGuestListScreen();
+    } else {
+      screen = switch (index) {
+        1 => const InvitedByGuardScreen(),
+        2 => const YesterdayGuestListScreen(),
+        3 => const MonthGuestReportScreen(),
+        _ => null,
+      };
+    }
+
+    final next = screen;
+    if (next == null) {
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
         ..showSnackBar(SnackBar(content: Text('$title — coming soon')));
       return;
     }
 
-    Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => screen));
+    Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => next));
   }
 }
 

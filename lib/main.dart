@@ -19,7 +19,7 @@ void main() async {
   await NotificationService.instance.initialize();
 
   runApp(const MyApp());
-  //configLoading();
+  configLoading();
 }
 // Loader
 void configLoading() {
