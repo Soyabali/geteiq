@@ -4,10 +4,13 @@ import 'package:flutter/foundation.dart';
 /// A person being invited through the gate.
 @immutable
 class Guest {
-  const Guest({required this.name, required this.phone});
+  const Guest({required this.name, required this.phone, this.department});
 
   final String name;
   final String phone;
+
+  /// Optional department (used by the guard "Add Manually" flow).
+  final String? department;
 
   /// Initials for the avatar circle, e.g. "Ravi Yadav" -> "RY".
   String get initials {
@@ -21,8 +24,11 @@ class Guest {
     return (parts.first[0] + parts.last[0]).toUpperCase();
   }
 
-  Guest copyWith({String? name, String? phone}) =>
-      Guest(name: name ?? this.name, phone: phone ?? this.phone);
+  Guest copyWith({String? name, String? phone, String? department}) => Guest(
+    name: name ?? this.name,
+    phone: phone ?? this.phone,
+    department: department ?? this.department,
+  );
 
   @override
   bool operator ==(Object other) =>

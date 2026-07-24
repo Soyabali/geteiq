@@ -9,7 +9,6 @@ import '../widgets/app_scaffold.dart';
 import '../widgets/company_carousel.dart';
 import '../widgets/logout_dialog.dart';
 import 'expected_guest_screen.dart';
-import 'guard_invite_screen.dart';
 import 'invite_setup_sheet.dart';
 import 'invite_guest_list_screen.dart';
 import 'invited_by_guard_screen.dart';
@@ -339,25 +338,10 @@ class _AddGuestBar extends StatelessWidget {
 
   final double gutter;
 
-  /// Decides which flow the "Add Guest" button opens, based on the logged-in
-  /// user's type saved at login time (SharedPreferences key 'iUserType').
-  ///   iUserType == "1"  → Guard  → full-screen GuardInviteScreen
-  ///   otherwise (e.g. "2" management) → the Invite() bottom sheet
-  Future<void> _onAddGuest(BuildContext context) async {
-    // Read the user type stored during login.
-    final prefs = await SharedPreferences.getInstance();
-    final iUserType = prefs.getString('iUserType') ?? '';
-    if (!context.mounted) return;
-
-    if (iUserType == "1") {
-      // Guard → full-screen "Invite Setup" for a walk-in guest at the gate.
-      Navigator.of(context).push(
-        MaterialPageRoute<void>(builder: (_) => const GuardInviteScreen()),
-      );
-    } else {
-      // Management → the existing Invite bottom sheet.
-      showInviteSetupSheet(context, Invite());
-    }
+  /// "Add Guest" opens the same invite bottom sheet for BOTH roles —
+  /// guard (iUserType == "1") and management (iUserType == "2").
+  void _onAddGuest(BuildContext context) {
+    showInviteSetupSheet(context, Invite());
   }
 
   @override

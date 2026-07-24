@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/invite.dart';
 import '../theme/tokens.dart';
 import '../widgets/app_button.dart';
+import 'guard_add_manually_screen.dart';
 import 'select_guests_screen.dart';
 
 /// Screen 5 — invite setup, presented as a bottom sheet over the dashboard.
@@ -110,7 +112,7 @@ class _InviteSetupSheetState extends State<_InviteSetupSheet> {
     if (picked != null) setState(() => _invite.validForHours = picked);
   }
 
-  void _next() {
+  Future<void> _next() async {
     // The three values the next screen / API needs, in the API's own format.
     // (All three also live inside `_invite`, so passing `_invite` forward
     //  carries them to every screen after this one.)
@@ -127,13 +129,21 @@ class _InviteSetupSheetState extends State<_InviteSetupSheet> {
     print('iValidHours : $iValidHours');
     print('======================================================');
 
+    // Guard (iUserType == "1") -> the Add Manually screen (with Department).
+    // Management -> the full 3-tab Select Guests screen (no change).
+    final prefs = await SharedPreferences.getInstance();
+    final isGuard = (prefs.getString('iUserType') ?? '').trim() == "1";
+    if (!mounted) return;
+
     // Grab the navigator before popping — this context is torn down with
     // the sheet route.
     final navigator = Navigator.of(context);
     navigator.pop(); // close the bottom sheet
     navigator.push(
       MaterialPageRoute<void>(
-        builder: (_) => SelectGuestsScreen(invite: _invite),
+        builder: (_) => isGuard
+            ? GuardAddManuallyScreen(invite: _invite)
+            : SelectGuestsScreen(invite: _invite),
       ),
     );
   }

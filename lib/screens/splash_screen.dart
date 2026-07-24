@@ -79,9 +79,9 @@ class _SplashScreenState extends State<SplashScreen>
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context).textTheme;
-    // Keep the animation proportional but never oversized on tablets.
+    // Bigger, more prominent animation — proportional but capped on tablets.
     final side = MediaQuery.sizeOf(context).width;
-    final artSize = (side * 0.52).clamp(160.0, 260.0);
+    final artSize = (side * 0.74).clamp(240.0, 360.0);
 
     return Scaffold(
       backgroundColor: AppColors.canvas,
