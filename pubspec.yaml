@@ -54,6 +54,7 @@ dependencies:
   path_provider: ^2.1.5
   # QR / barcode scanner (guard scans the visitor pass). Android + iOS.
   mobile_scanner: ^7.0.0
+  connectivity_plus: ^7.3.1
 
 dev_dependencies:
   flutter_test:

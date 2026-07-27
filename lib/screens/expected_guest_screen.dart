@@ -8,6 +8,7 @@ import '../theme/tokens.dart';
 import '../widgets/app_card.dart';
 import '../widgets/app_scaffold.dart';
 import '../widgets/pill_search_field.dart';
+import 'scan_visitor_screen.dart';
 
 /// Guard-side "Expected Guests" screen.
 ///
@@ -97,10 +98,14 @@ class _ExpectedGuestScreenState extends State<ExpectedGuestScreen> {
   // sStatus text -> GuestStage (drives the highlighted action button + counts).
   GuestStage _stageFromStatus(String status) {
     final s = status.toLowerCase();
-    if (s.contains('checkout') || s.contains('check-out') || s.contains('check out')) {
+    if (s.contains('checkout') ||
+        s.contains('check-out') ||
+        s.contains('check out')) {
       return GuestStage.checkout;
     }
-    if (s.contains('checkin') || s.contains('check-in') || s.contains('check in')) {
+    if (s.contains('checkin') ||
+        s.contains('check-in') ||
+        s.contains('check in')) {
       return GuestStage.checkin;
     }
     if (s.contains('meeting')) return GuestStage.meeting;
@@ -114,8 +119,7 @@ class _ExpectedGuestScreenState extends State<ExpectedGuestScreen> {
     super.dispose();
   }
 
-  int _countOf(GuestStage stage) =>
-      _all.where((g) => g.stage == stage).length;
+  int _countOf(GuestStage stage) => _all.where((g) => g.stage == stage).length;
 
   List<ExpectedGuest> get _filtered {
     final q = _search.text.trim().toLowerCase();
@@ -163,66 +167,66 @@ class _ExpectedGuestScreenState extends State<ExpectedGuestScreen> {
             : _error
             ? _ErrorState(onRetry: _load)
             : CenteredFill(
-          child: Column(
-            children: [
-              // Search
-              Padding(
-                padding: EdgeInsets.fromLTRB(
-                  gutter,
-                  AppSpacing.xs,
-                  gutter,
-                  AppSpacing.md,
-                ),
-                child: PillSearchField(
-                  controller: _search,
-                  hint: 'Search',
-                  onChanged: () => setState(() {}),
-                ),
-              ),
-
-              // 2 x 2 stage filter tiles
-              Padding(
-                padding: EdgeInsets.symmetric(horizontal: gutter),
-                child: _StatGrid(
-                  expected: _countOf(GuestStage.expected),
-                  checkin: _countOf(GuestStage.checkin),
-                  meeting: _countOf(GuestStage.meeting),
-                  checkout: _countOf(GuestStage.checkout),
-                  selected: _stageFilter,
-                  onTap: _toggleFilter,
-                ),
-              ),
-              const SizedBox(height: AppSpacing.md),
-
-              // Guest list
-              Expanded(
-                child: rows.isEmpty
-                    ? const _Empty()
-                    : ListView.separated(
-                        physics: const BouncingScrollPhysics(
-                          parent: AlwaysScrollableScrollPhysics(),
-                        ),
-                        padding: EdgeInsets.fromLTRB(
-                          gutter,
-                          AppSpacing.xs,
-                          gutter,
-                          AppSpacing.xxl,
-                        ),
-                        itemCount: rows.length,
-                        separatorBuilder: (_, __) =>
-                            const SizedBox(height: AppSpacing.md),
-                        itemBuilder: (context, i) {
-                          final g = rows[i];
-                          return _GuestCard(
-                            guest: g,
-                            onStage: (stage) => _setStage(g, stage),
-                          );
-                        },
+                child: Column(
+                  children: [
+                    // Search
+                    Padding(
+                      padding: EdgeInsets.fromLTRB(
+                        gutter,
+                        AppSpacing.xs,
+                        gutter,
+                        AppSpacing.md,
                       ),
+                      child: PillSearchField(
+                        controller: _search,
+                        hint: 'Search',
+                        onChanged: () => setState(() {}),
+                      ),
+                    ),
+
+                    // 2 x 2 stage filter tiles
+                    Padding(
+                      padding: EdgeInsets.symmetric(horizontal: gutter),
+                      child: _StatGrid(
+                        expected: _countOf(GuestStage.expected),
+                        checkin: _countOf(GuestStage.checkin),
+                        meeting: _countOf(GuestStage.meeting),
+                        checkout: _countOf(GuestStage.checkout),
+                        selected: _stageFilter,
+                        onTap: _toggleFilter,
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+
+                    // Guest list
+                    Expanded(
+                      child: rows.isEmpty
+                          ? const _Empty()
+                          : ListView.separated(
+                              physics: const BouncingScrollPhysics(
+                                parent: AlwaysScrollableScrollPhysics(),
+                              ),
+                              padding: EdgeInsets.fromLTRB(
+                                gutter,
+                                AppSpacing.xs,
+                                gutter,
+                                AppSpacing.xxl,
+                              ),
+                              itemCount: rows.length,
+                              separatorBuilder: (_, __) =>
+                                  const SizedBox(height: AppSpacing.md),
+                              itemBuilder: (context, i) {
+                                final g = rows[i];
+                                return _GuestCard(
+                                  guest: g,
+                                  onStage: (stage) => _setStage(g, stage),
+                                );
+                              },
+                            ),
+                    ),
+                  ],
+                ),
               ),
-            ],
-          ),
-        ),
       ),
     );
   }
@@ -410,7 +414,14 @@ class _GuestCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: AppSpacing.sm),
-              _ApprovedBadge(label: guest.approval),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  _ApprovedBadge(label: guest.approval),
+                  const SizedBox(height: AppSpacing.xs),
+                  const _ScanIconButton(),
+                ],
+              ),
             ],
           ),
           const SizedBox(height: AppSpacing.md),
@@ -440,7 +451,8 @@ class _GuestCard extends StatelessWidget {
               Expanded(
                 child: _ActBtn(
                   label: 'Check-in',
-                  active: guest.stage == GuestStage.checkin ||
+                  active:
+                      guest.stage == GuestStage.checkin ||
                       guest.stage == GuestStage.meeting,
                   onTap: () => onStage(GuestStage.checkin),
                 ),
@@ -519,6 +531,32 @@ class _ApprovedBadge extends StatelessWidget {
   }
 }
 
+/// Same icon + same action as the AppBar scan button on the dashboard
+/// ([DashboardScreen]'s guard-only "Scan Visitor QR Pass" icon) — opens the
+/// camera to scan a visitor's QR/barcode pass, just placed on the card here
+/// instead of the AppBar.
+class _ScanIconButton extends StatelessWidget {
+  const _ScanIconButton();
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      icon: const Icon(
+        Icons.qr_code_scanner_rounded,
+        color: AppColors.ink,
+        size: 20,
+      ),
+      tooltip: 'Scan Visitor QR Pass',
+      visualDensity: VisualDensity.compact,
+      padding: EdgeInsets.zero,
+      constraints: const BoxConstraints(),
+      onPressed: () => Navigator.of(context).push(
+        MaterialPageRoute<void>(builder: (_) => const ScanVisitorScreen()),
+      ),
+    );
+  }
+}
+
 /// One of the three flow-action buttons. Filled (brand) when it is the
 /// guest's current stage, otherwise a soft outlined pill.
 class _ActBtn extends StatelessWidget {
@@ -584,7 +622,11 @@ class _ErrorState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.wifi_off_rounded, size: 44, color: AppColors.faint),
+            const Icon(
+              Icons.wifi_off_rounded,
+              size: 44,
+              color: AppColors.faint,
+            ),
             const SizedBox(height: AppSpacing.md),
             Text(
               "Couldn't load the visitor list.",

@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../theme/tokens.dart';
 import '../widgets/brand_mark.dart';
+import '../widgets/no_internet_screen.dart';
 import 'dashboard_screen.dart';
 import 'login_screen.dart';
 
@@ -46,6 +47,11 @@ class _SplashScreenState extends State<SplashScreen>
   Future<void> _advance() async {
     if (_leaving || !mounted) return;
     _leaving = true;
+
+    // Gate on real internet first: if offline, this shows the full-screen
+    // animated-dog dialog and only returns once the connection is back.
+    await NoInternetScreen.waitForConnection(context);
+    if (!mounted) return;
 
     // If the user logged in before, skip login and go straight to the
     // dashboard. Otherwise show the login screen.
