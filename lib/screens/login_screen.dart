@@ -10,19 +10,21 @@ import '../data/session.dart';
 import '../models/user_role.dart';
 import '../services/getOtp.dart';
 import '../services/validateOtp.dart';
+import '../services/vmsUpdateVisitorGsmid.dart';
 import '../theme/tokens.dart';
 import '../widgets/app_button.dart';
-import '../widgets/app_scaffold.dart';
+import '../widgets/failure_dialog.dart';
 import 'dashboard_screen.dart';
 
 /// Screen 3 — mobile number, then a 4-digit OTP.
 ///
-/// The OTP block only appears once a code has been "sent", which keeps the
-/// first view as simple as the mockup.
+/// Flow:
+///   1) Enter a valid 10-digit number -> tap "Send OTP" -> FIRST api (getOtp),
+///      spinner shows inside the Send OTP button.
+///   2) On success the OTP box appears. Typing the 4 digits (test: 1982)
+///      auto-fires the SECOND api (validateOtp) with otp + mobile.
+///   3) Any api failure shows the reusable [FailureDialog].
 class LoginScreen extends StatefulWidget {
-  /// Defaults to [UserRole.management] so screens that reach this one
-  /// directly (e.g. the splash screen currently skips role selection) keep
-  /// today's behavior. [RoleSelectScreen] passes the picked role explicitly.
   const LoginScreen({super.key, this.role = UserRole.management});
 
   final UserRole role;
@@ -37,7 +39,8 @@ class _LoginScreenState extends State<LoginScreen> {
   final _otpFocus = FocusNode();
 
   bool _otpSent = false;
-  bool _verifying = false;
+  bool _sendingOtp = false; // first api in progress (Send OTP button spinner)
+  bool _verifying = false; // second api in progress (bottom button spinner)
   int _resendIn = 0;
   Timer? _resendTimer;
 
@@ -48,16 +51,30 @@ class _LoginScreenState extends State<LoginScreen> {
     super.initState();
     _phone.addListener(() => setState(() {}));
     _otp.addListener(() => setState(() {}));
-    setupPushNotifications();
+    _setupPushNotifications();
   }
 
-  void setupPushNotifications() async{
-    // Implement push notification setup logic here
-   final fcm = FirebaseMessaging.instance;
-   final token = await fcm.getToken();
-   //final token = await fcm.getAPNSToken();
-   print("Token : $token");
+  void _setupPushNotifications() async {
+    final fcm = FirebaseMessaging.instance;
+    final token = await fcm.getToken();
+    print("Token : $token");
+    //updateGsmid(token);
+    if(token!=null){
+      updateGsmid(token);
+    }
   }
+  // FirebaseTokenApi
+  updateGsmid(token) async {
+    if (token != null) {
+      print("--------68----xxx----$token");
+      var UpdateGsmid = await VmsUpdateVisitorgsmid().vmsUpdateVisitorGsmid(
+        context,
+        token,
+      );
+      print("-------Update Gsmid Visitor-------70-----$UpdateGsmid");
+    } else {}
+  }
+
 
   @override
   void dispose() {
@@ -72,57 +89,44 @@ class _LoginScreenState extends State<LoginScreen> {
   String get _digits => _phone.text.replaceAll(RegExp(r'\D'), '');
   bool get _phoneValid => _digits.length == 10;
   bool get _canLogin => _otpSent && _otp.text.length == _otpLength;
+  bool get _isGuard => widget.role == UserRole.guard;
 
-  // STEP 1 : user typed the mobile no and pressed "Send OTP".
-  void _sendOtp() {
-    if (!_phoneValid) return;
+  // ===================== STEP 1 : send OTP (first api) =====================
+  Future<void> _sendOtp() async {
+    if (!_phoneValid || _sendingOtp) return;
     FocusScope.of(context).unfocus();
-    setState(() => _otpSent = true); // show the OTP box
-    _startResendCountdown();
+    setState(() => _sendingOtp = true);
 
-    // Give the box a beat to appear before pulling focus into it.
-    Future<void>.delayed(const Duration(milliseconds: 220), () {
-      if (mounted) _otpFocus.requestFocus();
-    });
-
-    // call the FIRST api -> send otp on this number
-    getOtpResponse();
-  }
-
-  // FIRST API : VmsApiManagementGetOtp  (only sends the OTP)
-  void getOtpResponse() async {
     try {
-      // _digits = clean 10-digit number (no spaces)
-      var getOtp = await GetOtpRepo().getOtp(context, _digits);
-      print("------getOtpResponse----------$getOtp");
+      final res = await GetOtpRepo().getOtp(context, _digits);
+      print("------getOtpResponse----------$res");
       if (!mounted) return;
 
-      var result = "${getOtp['Result']}";
-      var msg = "${getOtp['Msg']}";
+      final result = "${res['Result']}";
+      final msg = "${res['Msg']}";
 
       if (result == "1") {
-        // OTP sent -> the OTP box is already visible, just tell the user.
-        ScaffoldMessenger.of(context)
-          ..hideCurrentSnackBar()
-          ..showSnackBar(
-            SnackBar(content: Text('OTP sent to +91 ${_formatted(_digits)}')),
-          );
+        // Success -> reveal the OTP box + start the resend timer.
+        setState(() => _otpSent = true);
+        _startResendCountdown();
+        Future<void>.delayed(const Duration(milliseconds: 220), () {
+          if (mounted) _otpFocus.requestFocus();
+        });
       } else {
-        // something went wrong -> show the api message
-        ScaffoldMessenger.of(context)
-          ..hideCurrentSnackBar()
-          ..showSnackBar(SnackBar(content: Text('$msg')));
+        await FailureDialog.show(
+          context,
+          msg.isEmpty ? 'Could not send OTP. Please try again.' : msg,
+        );
       }
     } catch (e) {
-      // No internet / server down. The OTP box is already visible, so while
-      // testing offline you can still type 1982 and press Login.
       print("------getOtp error----------$e");
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(
-          const SnackBar(content: Text('Can\'t reach server. Use test OTP 1982.')),
-        );
+      await FailureDialog.show(
+        context,
+        'Something went wrong. Please try again.',
+      );
+    } finally {
+      if (mounted) setState(() => _sendingOtp = false);
     }
   }
 
@@ -136,71 +140,56 @@ class _LoginScreenState extends State<LoginScreen> {
     });
   }
 
-
-  // STEP 2 : user filled the OTP and pressed "Login".
-  // SECOND API : VmsApiManagementValidateOtp (mobileNo + otp -> verify).
-  Future<void> _login() async {
-    if (!_canLogin) return;
+  // =================== STEP 2 : verify OTP (second api) ===================
+  Future<void> _verifyOtp() async {
+    if (!_canLogin || _verifying) return;
     FocusScope.of(context).unfocus();
     setState(() => _verifying = true);
 
-    // ================= CHANGE HERE (OTP value) =================
-    // This sends whatever the user typed in the OTP box to the api.
-    // While testing, the backend accepts the fixed OTP "1982",
-    // so just type 1982 in the box and login will work.
-    //
-    // NOTE: if you ever want to FORCE a fixed test otp (ignore the box),
-    // replace the line below with:  var otpNumber = "1982";
-    var otpNumber = _otp.text.trim(); // otp from the box (type 1982 for now)
-    // ===========================================================
-    var phoneNumber = _digits;        // clean 10-digit number
+    final otpNumber = _otp.text.trim(); // test OTP: 1982
+    final phoneNumber = _digits;
 
     try {
-      // call the SECOND api -> validate the otp
-      var response = await ValidateOtpRepo().validateOtp(
+      final res = await ValidateOtpRepo().validateOtp(
         context,
         otpNumber,
         phoneNumber,
       );
-      print("------validateOtpResponse----------$response");
+      print("------validateOtpResponse----------$res");
       if (!mounted) return;
 
-      var result = "${response['Result']}";
-      var msg = "${response['Msg']}";
+      final result = "${res['Result']}";
+      final msg = "${res['Msg']}";
 
       if (result == "1") {
-        // success -> save the user detail in sharedPreference
-        SharedPreferences prefs = await SharedPreferences.getInstance();
-        await prefs.setString('sUserName', "${response['sUserName']}");
-        await prefs.setString('sContactNo', "${response['sContactNo']}");
-        await prefs.setString('iUserType', "${response['iUserType']}");
-        await prefs.setString('sEmailId', "${response['sEmailId']}");
+        // Save the user detail and open the dashboard.
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('sUserName', "${res['sUserName']}");
+        await prefs.setString('sContactNo', "${res['sContactNo']}");
+        await prefs.setString('iUserType', "${res['iUserType']}");
+        await prefs.setString('sEmailId', "${res['sEmailId']}");
         await prefs.setBool('isLoggedIn', true);
         if (!mounted) return;
 
-        // go to the Dashboard
         AppSession.signIn(widget.role);
         Navigator.of(context).pushAndRemoveUntil(
           MaterialPageRoute<void>(builder: (_) => const DashboardScreen()),
           (route) => false,
         );
       } else {
-        // wrong otp / failed -> stay on screen and show the message
-        ScaffoldMessenger.of(context)
-          ..hideCurrentSnackBar()
-          ..showSnackBar(SnackBar(content: Text('$msg')));
+        await FailureDialog.show(
+          context,
+          msg.isEmpty ? 'Invalid OTP. Please try again.' : msg,
+        );
       }
     } catch (e) {
-      // network / server error -> show a message instead of hanging
       print("------login error----------$e");
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(
-          const SnackBar(content: Text('Something went wrong. Please try again.')),
-        );
+      await FailureDialog.show(
+        context,
+        'Something went wrong. Please try again.',
+      );
     } finally {
-      // always reset the button, success or fail.
       if (mounted) setState(() => _verifying = false);
     }
   }
@@ -213,143 +202,428 @@ class _LoginScreenState extends State<LoginScreen> {
   Widget build(BuildContext context) {
     final t = Theme.of(context).textTheme;
 
-    return AppScaffold(
-      title: 'Login',
-      bottomBar: PrimaryButton(
-        label: 'Login',
-        loading: _verifying,
-        onPressed: _canLogin ? _login : null,
+    return Scaffold(
+      backgroundColor: AppColors.canvas,
+      body: SafeArea(
+        child: Column(
+          children: [
+            // ---- Header: back + SECURE ACCESS ----
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.lg,
+                AppSpacing.md,
+                AppSpacing.lg,
+                AppSpacing.xs,
+              ),
+              child: Row(
+                children: [
+                  if (Navigator.of(context).canPop())
+                    GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () => Navigator.of(context).maybePop(),
+                      child: const Padding(
+                        padding: EdgeInsets.only(right: AppSpacing.md),
+                        child: Icon(
+                          Icons.arrow_back_ios_new_rounded,
+                          size: 20,
+                          color: AppColors.ink,
+                        ),
+                      ),
+                    ),
+                  Text(
+                    'Secure access',
+                    style: t.labelSmall?.copyWith(
+                      color: AppColors.faint,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.6,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            // ---- Scrollable content ----
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.lg,
+                  AppSpacing.sm,
+                  AppSpacing.lg,
+                  AppSpacing.lg,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _HeroCard(isGuard: _isGuard),
+                    const SizedBox(height: AppSpacing.xl),
+
+                    Text(
+                      _isGuard
+                          ? 'Guard mobile number'
+                          : 'Management mobile number',
+                      style: t.bodyMedium?.copyWith(color: AppColors.inkSoft),
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+
+                    // Phone + Send OTP row.
+                    SizedBox(
+                      height: 52,
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Expanded(child: _phoneField(t)),
+                          const SizedBox(width: AppSpacing.sm),
+                          _DarkButton(
+                            label: _resendIn > 0 ? '${_resendIn}s' : 'Send OTP',
+                            loading: _sendingOtp,
+                            enabled: _phoneValid && _resendIn == 0,
+                            onTap: _sendOtp,
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.lg),
+
+                    // OTP card (after send) OR the hint box (before send).
+                    AnimatedSize(
+                      duration: const Duration(milliseconds: 300),
+                      curve: Curves.easeOutCubic,
+                      alignment: Alignment.topCenter,
+                      child: _otpSent ? _otpCard(t) : _infoBox(t),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            // ---- Bottom: primary button + policy line ----
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.lg,
+                AppSpacing.md,
+                AppSpacing.lg,
+                AppSpacing.xl,
+              ),
+              child: Column(
+                children: [
+                  PrimaryButton(
+                    label: _isGuard ? 'Enter Guard Desk' : 'Enter Dashboard',
+                    loading: _verifying,
+                    onPressed: _canLogin ? _verifyOtp : null,
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                  Text(
+                    'By continuing you agree to society visitor policy',
+                    textAlign: TextAlign.center,
+                    style: t.labelSmall?.copyWith(color: AppColors.faint),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ---- +91 phone field (bordered box) ----
+  Widget _phoneField(TextTheme t) {
+    return Container(
+      alignment: Alignment.center,
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(AppRadii.md),
+        border: Border.all(color: AppColors.border, width: 1.4),
+      ),
+      child: Row(
+        children: [
+          Text(
+            '+91',
+            style: t.titleSmall?.copyWith(
+              color: AppColors.muted,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: TextField(
+              controller: _phone,
+              keyboardType: TextInputType.phone,
+              textInputAction: TextInputAction.done,
+              textAlignVertical: TextAlignVertical.center,
+              onSubmitted: (_) => _sendOtp(),
+              style: t.titleMedium,
+              inputFormatters: [
+                FilteringTextInputFormatter.digitsOnly,
+                LengthLimitingTextInputFormatter(10),
+                _PhoneSpacer(),
+              ],
+              decoration: InputDecoration(
+                isCollapsed: true,
+                filled: false,
+                border: InputBorder.none,
+                enabledBorder: InputBorder.none,
+                focusedBorder: InputBorder.none,
+                hintText: '98765 43210',
+                hintStyle: t.titleMedium?.copyWith(color: AppColors.faint),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ---- OTP card ----
+  Widget _otpCard(TextTheme t) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.md,
+        AppSpacing.md,
+        AppSpacing.md,
+        AppSpacing.md,
+      ),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(AppRadii.xl),
+        border: Border.all(color: const Color(0xFFE4E2DB), width: 1.4),
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const SizedBox(height: AppSpacing.sm),
-          Text('Enter Mobile No.', style: t.bodyMedium),
+          Text(
+            'Enter 4-digit OTP',
+            style: t.bodyMedium?.copyWith(color: AppColors.inkSoft),
+          ),
+          const SizedBox(height: AppSpacing.md),
+          _OtpField(
+            controller: _otp,
+            focusNode: _otpFocus,
+            length: _otpLength,
+            onCompleted: (_) => _verifyOtp(), // auto-fire the second api
+          ),
           const SizedBox(height: AppSpacing.md),
           Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Expanded(
-                child: TextField(
-                  controller: _phone,
-                  autofocus: true,
-                  keyboardType: TextInputType.phone,
-                  textInputAction: TextInputAction.done,
-                  onSubmitted: (_) => _sendOtp(),
-                  style: t.titleLarge?.copyWith(letterSpacing: 0.4),
-                  inputFormatters: [
-                    FilteringTextInputFormatter.digitsOnly,
-                    LengthLimitingTextInputFormatter(10),
-                    _PhoneSpacer(),
-                  ],
-                  decoration: const InputDecoration(
-                    hintText: '98765 43210',
-                    prefixText: '+91  ',
+              Flexible(
+                child: Text(
+                  'Code sent to +91 ${_formatted(_digits)}  ·  ',
+                  style: t.bodySmall?.copyWith(color: AppColors.faint),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              GestureDetector(
+                onTap: _resendIn == 0 ? _sendOtp : null,
+                child: Text(
+                  _resendIn > 0 ? 'Resend in ${_resendIn}s' : 'Resend',
+                  style: t.bodySmall?.copyWith(
+                    color: _resendIn > 0 ? AppColors.faint : AppColors.brand,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
               ),
-              const SizedBox(width: AppSpacing.md),
-              // Send Otp button
-              _SendOtpButton(
-                enabled: _phoneValid && _resendIn == 0,
-                label: _resendIn > 0 ? '${_resendIn}s' : 'Send OTP',
-                onPressed: _sendOtp,
-              ),
             ],
           ),
-          // OTP block animates in only after a code has been sent.
-          AnimatedSize(
-            duration: const Duration(milliseconds: 320),
-            curve: Curves.easeOutCubic,
-            alignment: Alignment.topCenter,
-            child: _otpSent
-                ? Padding(
-                    padding: const EdgeInsets.only(top: AppSpacing.xxxl),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Enter $_otpLength-digit code',
-                          style: t.bodyMedium,
-                        ),
-                        const SizedBox(height: AppSpacing.lg),
-                        _OtpField(
-                          controller: _otp,
-                          focusNode: _otpFocus,
-                          length: _otpLength,
-                          onCompleted: (_) => _login(),
-                        ),
-                        const SizedBox(height: AppSpacing.lg),
-                        Row(
-                          children: [
-                            Text("Didn't get it?", style: t.bodySmall),
-                            const SizedBox(width: AppSpacing.xs),
-                            GestureDetector(
-                              onTap: _resendIn == 0 ? _sendOtp : null,
-                              child: Text(
-                                _resendIn > 0
-                                    ? 'Resend in ${_resendIn}s'
-                                    : 'Resend',
-                                style: t.bodySmall?.copyWith(
-                                  color: _resendIn > 0
-                                      ? AppColors.faint
-                                      : AppColors.brand,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  )
-                : const SizedBox(width: double.infinity),
-          ),
-          const SizedBox(height: AppSpacing.xxl),
         ],
+      ),
+    );
+  }
+
+  // ---- Hint box (before OTP is sent) ----
+  Widget _infoBox(TextTheme t) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF7F2),
+        borderRadius: BorderRadius.circular(AppRadii.lg),
+        border: Border.all(color: AppColors.brand.withValues(alpha: 0.35)),
+      ),
+      child: Text.rich(
+        TextSpan(
+          style: t.bodySmall?.copyWith(
+            color: const Color(0xFF9A5A38),
+            height: 1.45,
+          ),
+          children: const [
+            TextSpan(text: 'Enter your mobile number and tap '),
+            TextSpan(
+              text: 'Send OTP',
+              style: TextStyle(fontWeight: FontWeight.w800),
+            ),
+            TextSpan(
+              text:
+                  ' to continue. One login keeps guest flow secure from lobby to flat.',
+            ),
+          ],
+        ),
       ),
     );
   }
 }
 
-/// Outlined pill matching the "Send OTP" control in the design.
-class _SendOtpButton extends StatelessWidget {
-  const _SendOtpButton({
-    required this.enabled,
-    required this.label,
-    required this.onPressed,
-  });
+/// Gradient hero card at the top of the login screen.
+class _HeroCard extends StatelessWidget {
+  const _HeroCard({required this.isGuard});
 
-  final bool enabled;
-  final String label;
-  final VoidCallback onPressed;
+  final bool isGuard;
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedOpacity(
-      opacity: enabled ? 1 : 0.45,
-      duration: const Duration(milliseconds: 200),
-      child: Material(
-        color: AppColors.surface,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppRadii.pill),
-          side: const BorderSide(color: AppColors.brand, width: 1.4),
+    final t = Theme.of(context).textTheme;
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(AppRadii.xl),
+      child: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Color(0xFF6E3410), Color(0xFFD4470A), Color(0xFFEA530A)],
+          ),
         ),
-        child: InkWell(
-          onTap: enabled ? onPressed : null,
-          borderRadius: BorderRadius.circular(AppRadii.pill),
-          child: Container(
-            height: 46,
-            constraints: const BoxConstraints(minWidth: 104),
-            alignment: Alignment.center,
-            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
-            child: Text(
-              label,
-              style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                color: AppColors.brand,
-                fontWeight: FontWeight.w700,
+        child: Stack(
+          children: [
+            // Big faint "IQ" watermark.
+            Positioned(
+              right: -14,
+              bottom: -34,
+              child: Text(
+                'IQ',
+                style: TextStyle(
+                  fontSize: 120,
+                  height: 1,
+                  fontWeight: FontWeight.w900,
+                  color: Colors.white.withValues(alpha: 0.08),
+                ),
               ),
             ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.xl,
+                AppSpacing.xl,
+                AppSpacing.xl,
+                AppSpacing.xl,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        width: 36,
+                        height: 36,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.18),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: Colors.white.withValues(alpha: 0.25),
+                          ),
+                        ),
+                        child: const Icon(
+                          Icons.grid_view_rounded,
+                          color: Colors.white,
+                          size: 18,
+                        ),
+                      ),
+                      const SizedBox(width: AppSpacing.sm),
+                      const Text(
+                        'gateIQ',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 20,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: -0.3,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: AppSpacing.lg),
+                  SizedBox(
+                    width: 250,
+                    child: Text(
+                      isGuard
+                          ? 'Open the gate desk'
+                          : 'Sign in to manage guests',
+                      style: t.headlineSmall?.copyWith(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w800,
+                        height: 1.2,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+                  SizedBox(
+                    width: 260,
+                    child: Text(
+                      isGuard
+                          ? 'Verify QR, log walk-ins, and keep the lobby moving.'
+                          : 'Approve visits, track check-ins, and stay in control.',
+                      style: t.bodySmall?.copyWith(
+                        color: Colors.white.withValues(alpha: 0.85),
+                        height: 1.4,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Dark "Send OTP" button with an in-center spinner while the api runs.
+class _DarkButton extends StatelessWidget {
+  const _DarkButton({
+    required this.label,
+    required this.loading,
+    required this.enabled,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool loading;
+  final bool enabled;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final active = enabled && !loading;
+    return AnimatedOpacity(
+      opacity: active || loading ? 1 : 0.5,
+      duration: const Duration(milliseconds: 180),
+      child: Material(
+        color: AppColors.ink,
+        borderRadius: BorderRadius.circular(AppRadii.md),
+        child: InkWell(
+          onTap: active ? onTap : null,
+          borderRadius: BorderRadius.circular(AppRadii.md),
+          child: Container(
+            constraints: const BoxConstraints(minWidth: 104),
+            alignment: Alignment.center,
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+            child: loading
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  )
+                : Text(
+                    label,
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
           ),
         ),
       ),
@@ -374,14 +648,14 @@ class _OtpField extends StatelessWidget {
   Widget build(BuildContext context) {
     final base = PinTheme(
       width: 58,
-      height: 62,
+      height: 58,
       textStyle: Theme.of(
         context,
-      ).textTheme.headlineSmall?.copyWith(fontSize: 24, color: AppColors.ink),
+      ).textTheme.headlineSmall?.copyWith(fontSize: 22, color: AppColors.ink),
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(AppRadii.md),
-        border: Border.all(color: AppColors.border),
+        border: Border.all(color: const Color(0xFFD8D6CE)),
       ),
     );
 
@@ -391,8 +665,6 @@ class _OtpField extends StatelessWidget {
       focusNode: focusNode,
       onCompleted: onCompleted,
       keyboardType: TextInputType.number,
-      // iOS surfaces the incoming code as a keyboard suggestion out of the box.
-      // For Android auto-fill, pass a `smsRetriever` implementation here.
       defaultPinTheme: base,
       focusedPinTheme: base.copyWith(
         decoration: base.decoration!.copyWith(

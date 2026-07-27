@@ -74,12 +74,29 @@ class _ScanVisitorScreenState extends State<ScanVisitorScreen> {
       appBar: AppBar(
         backgroundColor: Colors.black,
         foregroundColor: Colors.white,
-        title: const Text('Scan Visitor QR Pass'),
+        surfaceTintColor: Colors.transparent,
+        iconTheme: const IconThemeData(color: Colors.white),
+        actionsIconTheme: const IconThemeData(color: Colors.white),
+        // Clear close button to exit the camera.
+        leading: IconButton(
+          tooltip: 'Close',
+          icon: const Icon(Icons.close_rounded, color: Colors.white),
+          onPressed: () => Navigator.of(context).maybePop(),
+        ),
+        title: const Text(
+          'Scan Visitor QR Pass',
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 18,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
         actions: [
           IconButton(
             tooltip: 'Torch',
             icon: Icon(
               _torchOn ? Icons.flash_on_rounded : Icons.flash_off_rounded,
+              color: Colors.white,
             ),
             onPressed: () {
               _controller.toggleTorch();

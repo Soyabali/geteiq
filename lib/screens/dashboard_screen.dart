@@ -9,9 +9,9 @@ import '../widgets/app_scaffold.dart';
 import '../widgets/company_carousel.dart';
 import '../widgets/logout_dialog.dart';
 import 'expected_guest_screen.dart';
+import 'gate_log_screen.dart';
 import 'invite_setup_sheet.dart';
 import 'invite_guest_list_screen.dart';
-import 'invited_by_guard_screen.dart';
 import 'login_screen.dart';
 import 'month_guest_report_screen.dart';
 import 'notification_screen.dart';
@@ -314,7 +314,7 @@ class _ActionGridState extends State<_ActionGrid> {
           : const InviteGuestListScreen();
     } else {
       screen = switch (index) {
-        1 => const InvitedByGuardScreen(),
+        1 => const GateLogScreen(),
         2 => const YesterdayGuestListScreen(),
         3 => const MonthGuestReportScreen(),
         _ => null,
