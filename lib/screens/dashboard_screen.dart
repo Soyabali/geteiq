@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-
 import '../models/invite.dart';
 import '../theme/tokens.dart';
 import '../widgets/app_button.dart';
@@ -13,13 +12,14 @@ import 'gate_log_screen.dart';
 import 'invite_setup_sheet.dart';
 import 'invite_guest_list_screen.dart';
 import 'login_screen.dart';
-import 'month_guest_report_screen.dart';
+import 'month_guest_list_screen.dart';
 import 'notification_screen.dart';
 import 'scan_visitor_screen.dart';
 import 'yesterday_guest_list_screen.dart';
 
 /// Screen 4 — home. Sponsored slot, four entry points, and the primary
 /// "Add Guest" action that starts the invite flow.
+///
 class DashboardScreen extends StatelessWidget {
   const DashboardScreen({super.key});
 
@@ -181,11 +181,7 @@ class _LogoutIconButton extends StatelessWidget {
         highlightColor: AppColors.brand.withValues(alpha: 0.08),
         child: const Padding(
           padding: EdgeInsets.all(10),
-          child: Icon(
-            Icons.logout_rounded,
-            color: AppColors.brand,
-            size: 21,
-          ),
+          child: Icon(Icons.logout_rounded, color: AppColors.brand, size: 21),
         ),
       ),
     );
@@ -193,11 +189,7 @@ class _LogoutIconButton extends StatelessWidget {
 }
 
 class _IconAction extends StatelessWidget {
-  const _IconAction({
-    required this.icon,
-    required this.tooltip,
-    this.onTap,
-  });
+  const _IconAction({required this.icon, required this.tooltip, this.onTap});
 
   final IconData icon;
   final String tooltip;
@@ -316,7 +308,7 @@ class _ActionGridState extends State<_ActionGrid> {
       screen = switch (index) {
         1 => const GateLogScreen(),
         2 => const YesterdayGuestListScreen(),
-        3 => const MonthGuestReportScreen(),
+        3 => const MonthGuestListScreen(),
         _ => null,
       };
     }

@@ -259,8 +259,8 @@ class _LoginScreenState extends State<LoginScreen> {
 
                     Text(
                       _isGuard
-                          ? 'Guard mobile number'
-                          : 'Management mobile number',
+                          ? 'Mobile Number'
+                          : 'Mobile Number',
                       style: t.bodyMedium?.copyWith(color: AppColors.inkSoft),
                     ),
                     const SizedBox(height: AppSpacing.md),
@@ -313,7 +313,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                   const SizedBox(height: AppSpacing.md),
                   Text(
-                    'By continuing you agree to society visitor policy',
+                    'By continuing you agree to visitor policy',
                     textAlign: TextAlign.center,
                     style: t.labelSmall?.copyWith(color: AppColors.faint),
                   ),

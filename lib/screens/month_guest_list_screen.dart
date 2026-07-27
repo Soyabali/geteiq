@@ -2,26 +2,24 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../models/guard_visitor.dart';
-import '../services/VMSGaurdVisitorRequestListYesterday.dart';
+import '../services/VMSGaurdVisitorRequestListMonth.dart';
 import '../theme/tokens.dart';
 import '../widgets/app_card.dart';
 import '../widgets/app_scaffold.dart';
 import '../widgets/pill_search_field.dart';
 
-/// "Yesterday guest list" — guard's visitor requests from the previous day.
+/// "Month guest list" — every guard visitor request from the current month.
 ///
-/// Read-only history: no approve action and no note field (unlike Gate Log),
-/// since yesterday's requests are already resolved. Data comes from
-/// [GuardVisitorYesterdayRepo].
-class YesterdayGuestListScreen extends StatefulWidget {
-  const YesterdayGuestListScreen({super.key});
+/// Read-only history, same layout as [YesterdayGuestListScreen]: no approve
+/// action and no note field. Data comes from [GuardVisitorMonthRepo].
+class MonthGuestListScreen extends StatefulWidget {
+  const MonthGuestListScreen({super.key});
 
   @override
-  State<YesterdayGuestListScreen> createState() =>
-      _YesterdayGuestListScreenState();
+  State<MonthGuestListScreen> createState() => _MonthGuestListScreenState();
 }
 
-class _YesterdayGuestListScreenState extends State<YesterdayGuestListScreen> {
+class _MonthGuestListScreenState extends State<MonthGuestListScreen> {
   final _search = TextEditingController();
 
   List<GuardVisitor> _all = [];
@@ -46,7 +44,7 @@ class _YesterdayGuestListScreenState extends State<YesterdayGuestListScreen> {
       _error = false;
     });
     try {
-      final list = await GuardVisitorYesterdayRepo().getVisitorList(context);
+      final list = await GuardVisitorMonthRepo().getVisitorList(context);
       if (!mounted) return;
       setState(() {
         _all = list;
@@ -86,7 +84,7 @@ class _YesterdayGuestListScreenState extends State<YesterdayGuestListScreen> {
                 onPressed: () => Navigator.of(context).maybePop(),
               )
             : null,
-        title: const Text('Yesterday guest list'),
+        title: const Text('Month guest list'),
       ),
       body: SafeArea(
         bottom: false,
@@ -108,7 +106,7 @@ class _YesterdayGuestListScreenState extends State<YesterdayGuestListScreen> {
                       ),
                       child: PillSearchField(
                         controller: _search,
-                        hint: "Search yesterday's guests",
+                        hint: "Search this month's guests",
                         onChanged: () => setState(() {}),
                       ),
                     ),
@@ -129,7 +127,7 @@ class _YesterdayGuestListScreenState extends State<YesterdayGuestListScreen> {
                               separatorBuilder: (_, __) =>
                                   const SizedBox(height: AppSpacing.md),
                               itemBuilder: (context, i) =>
-                                  _YesterdayGuestCard(visitor: rows[i]),
+                                  _MonthGuestCard(visitor: rows[i]),
                             ),
                     ),
                   ],
@@ -140,13 +138,13 @@ class _YesterdayGuestListScreenState extends State<YesterdayGuestListScreen> {
   }
 }
 
-class _YesterdayGuestCard extends StatelessWidget {
-  const _YesterdayGuestCard({required this.visitor});
+class _MonthGuestCard extends StatelessWidget {
+  const _MonthGuestCard({required this.visitor});
 
   final GuardVisitor visitor;
 
   // sGuestNames may be a comma list -> "Ram +2" style, same convention as
-  // the Expected Guests screen.
+  // the Expected Guests / Yesterday screens.
   String get _guestName {
     final names = visitor.guestNames
         .split(',')
@@ -261,7 +259,7 @@ class _ErrorState extends StatelessWidget {
             ),
             const SizedBox(height: AppSpacing.md),
             Text(
-              "Couldn't load yesterday's guests.",
+              "Couldn't load this month's guests.",
               style: t.bodyMedium,
               textAlign: TextAlign.center,
             ),

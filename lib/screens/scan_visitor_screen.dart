@@ -7,6 +7,7 @@ import '../theme/tokens.dart';
 
 /// Guard-only screen: opens the camera, reads a visitor QR/barcode pass, and
 /// shows the decoded details on a card. Cross-platform (Android + iOS).
+
 class ScanVisitorScreen extends StatefulWidget {
   const ScanVisitorScreen({super.key});
 
@@ -34,6 +35,9 @@ class _ScanVisitorScreenState extends State<ScanVisitorScreen> {
         ? capture.barcodes.first.rawValue
         : null;
     if (code == null || code.trim().isEmpty) return;
+    // If the card ever shows fewer/different fields than expected, check this
+    // line — it's the exact, unparsed text the scanner read off the barcode.
+    debugPrint('🔎 Scanned raw: ${code.trim()}');
     setState(() => _raw = code.trim());
     _controller.stop(); // freeze the camera while showing the result
   }
@@ -43,28 +47,99 @@ class _ScanVisitorScreenState extends State<ScanVisitorScreen> {
     _controller.start();
   }
 
-  /// Turns the raw QR text into label/value pairs for the details card.
-  /// Handles JSON objects and URIs with query params; else shows nothing here
-  /// (the raw text is still displayed on the card).
+  /// Turns the raw scanned text into label/value pairs for the details card.
+  ///
+  /// The number and shape of fields packed into a barcode isn't fixed here,
+  /// so this tries several common encodings, in order, and — unlike a plain
+  /// "show the raw text" fallback — always returns at least one entry. That
+  /// way a barcode holding one code and a barcode holding many fields are
+  /// both rendered the same "label: value" way on the card.
   List<MapEntry<String, String>> _details(String raw) {
-    // 1) JSON object? e.g. {"sGuestName":"Ram","sContactNo":"98..."}
+    final trimmed = raw.trim();
+
+    // 1) JSON object, e.g. {"sQRCodeVal":"911309","sGuestNames":"Ram"}
+    // 2) JSON array, e.g. ["911309","Ram","T1304"]
     try {
-      final decoded = json.decode(raw);
+      final decoded = json.decode(trimmed);
       if (decoded is Map) {
         return decoded.entries
-            .map((e) => MapEntry(e.key.toString(), '${e.value}'))
+            .map((e) => MapEntry(_prettyLabel('${e.key}'), '${e.value}'))
             .toList();
+      }
+      if (decoded is List) {
+        return [
+          for (var i = 0; i < decoded.length; i++)
+            MapEntry('Field ${i + 1}', '${decoded[i]}'),
+        ];
       }
     } catch (_) {
       // not JSON — fall through
     }
-    // 2) URI with query params? e.g. gateiq://invite?code=123&flat=T%201%20304
-    final uri = Uri.tryParse(raw);
-    if (uri != null && uri.queryParameters.isNotEmpty) {
-      return uri.queryParameters.entries.toList();
+
+    // 3) URI with a scheme and query params,
+    //    e.g. gateiq://invite?code=911309&flat=T%201%20304
+    final uri = Uri.tryParse(trimmed);
+    if (uri != null && uri.hasScheme && uri.queryParameters.isNotEmpty) {
+      return uri.queryParameters.entries
+          .map((e) => MapEntry(_prettyLabel(e.key), e.value))
+          .toList();
     }
-    // 3) plain text
-    return const [];
+
+    // 4) key=value / key:value pairs joined by &, ;, |, a newline or a tab,
+    //    e.g. "code=911309&flat=T1304&guest=Ram" — same idea as #3 but with
+    //    no URI scheme, which Uri.tryParse won't split into query params.
+    final groups = trimmed
+        .split(RegExp(r'[&;|\n\t]'))
+        .map((p) => p.trim())
+        .where((p) => p.isNotEmpty)
+        .toList();
+
+    if (groups.isNotEmpty) {
+      final pairs = <MapEntry<String, String>>[];
+      var allHaveSeparator = true;
+      for (final g in groups) {
+        final i = g.indexOf(RegExp(r'[=:]'));
+        if (i <= 0) {
+          allHaveSeparator = false;
+          break;
+        }
+        pairs.add(
+          MapEntry(_prettyLabel(g.substring(0, i)), g.substring(i + 1).trim()),
+        );
+      }
+      if (allHaveSeparator) return pairs;
+
+      // 5) Same split, but no keys — just a delimited list of plain values,
+      //    e.g. "911309|Ram|T1304".
+      if (groups.length > 1) {
+        return [
+          for (var i = 0; i < groups.length; i++)
+            MapEntry('Field ${i + 1}', groups[i]),
+        ];
+      }
+    }
+
+    // 6) One atomic value (e.g. a bare numeric code) — still shown as
+    //    "label: value", the same fashion as everything above.
+    return [MapEntry('Code', trimmed)];
+  }
+
+  /// "sGuestNames" -> "Guest Names", "flat_no" -> "Flat No", "code" -> "Code".
+  /// Strips this backend's Hungarian `s`-string prefix (sQRCodeVal, sNote,
+  /// sGuestNames, ...) then title-cases camelCase / snake_case / kebab-case.
+  String _prettyLabel(String key) {
+    var k = key.trim();
+    if (k.length > 1 && k[0] == 's' && k[1] == k[1].toUpperCase()) {
+      k = k.substring(1);
+    }
+    final words = k
+        .replaceAllMapped(
+          RegExp(r'([a-z0-9])([A-Z])'),
+          (m) => '${m[1]} ${m[2]}',
+        )
+        .split(RegExp(r'[_\-\s]+'))
+        .where((w) => w.isNotEmpty);
+    return words.map((w) => w[0].toUpperCase() + w.substring(1)).join(' ');
   }
 
   @override
@@ -122,7 +197,6 @@ class _ScanVisitorScreenState extends State<ScanVisitorScreen> {
             Align(
               alignment: Alignment.bottomCenter,
               child: _ResultCard(
-                raw: _raw!,
                 details: _details(_raw!),
                 onScanAgain: _scanAgain,
                 onDone: () => Navigator.of(context).maybePop(),
@@ -166,13 +240,11 @@ class _ScanFrame extends StatelessWidget {
 /// Bottom card showing the decoded pass details.
 class _ResultCard extends StatelessWidget {
   const _ResultCard({
-    required this.raw,
     required this.details,
     required this.onScanAgain,
     required this.onDone,
   });
 
-  final String raw;
   final List<MapEntry<String, String>> details;
   final VoidCallback onScanAgain;
   final VoidCallback onDone;
@@ -209,29 +281,25 @@ class _ResultCard extends StatelessWidget {
             const Divider(height: 1),
             const SizedBox(height: AppSpacing.md),
 
-            // Parsed fields, or the raw text if we couldn't parse it.
-            if (details.isNotEmpty)
-              ...details.map(
-                (e) => Padding(
-                  padding: const EdgeInsets.only(bottom: 6),
-                  child: Text.rich(
-                    TextSpan(
-                      style: t.bodyMedium?.copyWith(color: AppColors.inkSoft),
-                      children: [
-                        TextSpan(
-                          text: '${e.key}: ',
-                          style: t.bodyMedium?.copyWith(
-                            color: AppColors.faint,
-                          ),
-                        ),
-                        TextSpan(text: e.value),
-                      ],
-                    ),
+            // Every field the barcode carried — one entry or many, all shown
+            // the same "label: value" way.
+            ...details.map(
+              (e) => Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Text.rich(
+                  TextSpan(
+                    style: t.bodyMedium?.copyWith(color: AppColors.inkSoft),
+                    children: [
+                      TextSpan(
+                        text: '${e.key}: ',
+                        style: t.bodyMedium?.copyWith(color: AppColors.faint),
+                      ),
+                      TextSpan(text: e.value),
+                    ],
                   ),
                 ),
-              )
-            else
-              Text(raw, style: t.bodyMedium),
+              ),
+            ),
 
             const SizedBox(height: AppSpacing.lg),
             Row(

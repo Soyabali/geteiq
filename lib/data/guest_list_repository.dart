@@ -37,15 +37,3 @@ class InvitedByGuardRepository implements GuestListRepository {
     return DemoData.guardEntries;
   }
 }
-
-/// "Yesterday guest list" — everyone from the previous day.
-class YesterdayGuestListRepository implements GuestListRepository {
-  const YesterdayGuestListRepository();
-
-  @override
-  Future<List<GuestEntry>> fetchGuests() async {
-    // TODO(api): GET /guests?day=yesterday  →  map with GuestEntry.fromJson
-    await Future<void>.delayed(const Duration(milliseconds: 450));
-    return DemoData.yesterdayGuests;
-  }
-}
