@@ -21,12 +21,19 @@ final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 /// * The same id is referenced by `default_notification_channel_id` in
 ///   `AndroidManifest.xml`, so notifications that Android renders on its own
 ///   (background / terminated) also land on this channel and get the sound.
+// NOTE: Android notification channels are **immutable once created**. Changing
+// `playSound`/`importance` in code does nothing on a device where a channel
+// with the same id already exists. If sound ever stops working after a channel
+// change, bump this id (…_v2 → _v3) so the OS recreates it with the new sound
+// settings. This must stay in sync with `default_notification_channel_id` in
+// AndroidManifest.xml.
 const AndroidNotificationChannel kDefaultChannel = AndroidNotificationChannel(
-  'high_importance_channel',
+  'high_importance_channel_v2',
   'General Notifications',
   description: 'Visitor and invite alerts.',
-  importance: Importance.high,
+  importance: Importance.high, // heads-up banner
   playSound: true, // default system sound (no custom sound file)
+  enableVibration: true,
 );
 
 final FlutterLocalNotificationsPlugin _localNotifications =

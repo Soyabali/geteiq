@@ -13,7 +13,7 @@ package: `com.synergynoida.vms`.
 | App state | Android | iOS |
 |-----------|---------|-----|
 | **Foreground** (open) | We render a local notification via `flutter_local_notifications` (Android does **not** auto-show FCM notifications when open). | The OS shows the banner because we set `setForegroundNotificationPresentationOptions(alert/badge/sound: true)`. |
-| **Background / terminated** | The OS renders the FCM `notification` payload automatically on the `high_importance_channel` (default sound). | The OS renders it via APNs (default sound when the payload asks for it). |
+| **Background / terminated** | The OS renders the FCM `notification` payload automatically on the `high_importance_channel_v2` (default sound). | The OS renders it via APNs (default sound when the payload asks for it). |
 | **Tap** | `onMessageOpenedApp` / `getInitialMessage` / local-notification tap → navigate. | Same. |
 
 > **Sound rule:** a notification only plays a sound if the message contains a
@@ -28,7 +28,7 @@ package: `com.synergynoida.vms`.
 - **`lib/services/notification_service.dart`** *(new)* — all FCM + local
   notification logic:
   - `navigatorKey` — global key for navigating on tap.
-  - `kDefaultChannel` — the Android channel `high_importance_channel`
+  - `kDefaultChannel` — the Android channel `high_importance_channel_v2`
     (importance high + default sound).
   - `firebaseMessagingBackgroundHandler` — top-level, `@pragma('vm:entry-point')`
     background handler.
@@ -43,7 +43,7 @@ package: `com.synergynoida.vms`.
 - Added `INTERNET` permission (FCM needs network).
 - Added `POST_NOTIFICATIONS` permission (**required on Android 13 / API 33+**).
 - `firebase_messaging_auto_init_enabled` → `true`.
-- Added `default_notification_channel_id` = `high_importance_channel` so the OS
+- Added `default_notification_channel_id` = `high_importance_channel_v2` so the OS
   uses our channel (and its sound) for background notifications.
 
 ### iOS
@@ -107,7 +107,7 @@ Send a **notification** message so the OS shows it and plays sound:
     "notification": { "title": "New visitor", "body": "Someone is at the gate" },
     "android": {
       "notification": {
-        "channel_id": "high_importance_channel",
+        "channel_id": "high_importance_channel_v2",
         "sound": "default"
       }
     },
@@ -118,7 +118,7 @@ Send a **notification** message so the OS shows it and plays sound:
 }
 ```
 
-- Android sound comes from the `high_importance_channel` channel (default sound);
+- Android sound comes from the `high_importance_channel_v2` channel (default sound);
   `channel_id` is optional because the manifest sets it as the default.
 - iOS sound **requires** `apns.payload.aps.sound = "default"`.
 
