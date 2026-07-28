@@ -22,6 +22,15 @@ class MonthGuestListScreen extends StatefulWidget {
 class _MonthGuestListScreenState extends State<MonthGuestListScreen> {
   final _search = TextEditingController();
 
+  // Date range filter — defaults to the current calendar month (1st -> last
+  // day), same default the api used before this filter existed.
+  late DateTime _fromDate;
+  late DateTime _toDate;
+
+  static final _dateFmt = DateFormat('d MMM yyyy');
+  static final _pickerFirstDate = DateTime(2020, 1, 1);
+  static final _pickerLastDate = DateTime.now().add(const Duration(days: 365));
+
   List<GuardVisitor> _all = [];
   bool _loading = true;
   bool _error = false;
@@ -29,6 +38,9 @@ class _MonthGuestListScreenState extends State<MonthGuestListScreen> {
   @override
   void initState() {
     super.initState();
+    final now = DateTime.now();
+    _fromDate = DateTime(now.year, now.month, 1);
+    _toDate = DateTime(now.year, now.month + 1, 0);
     _load();
   }
 
@@ -44,7 +56,11 @@ class _MonthGuestListScreenState extends State<MonthGuestListScreen> {
       _error = false;
     });
     try {
-      final list = await GuardVisitorMonthRepo().getVisitorList(context);
+      final list = await GuardVisitorMonthRepo().getVisitorList(
+        context,
+        fromDate: _fromDate,
+        toDate: _toDate,
+      );
       if (!mounted) return;
       setState(() {
         _all = list;
@@ -57,6 +73,65 @@ class _MonthGuestListScreenState extends State<MonthGuestListScreen> {
         _error = true;
       });
     }
+  }
+
+  // FromDate can never sit after ToDate -> cap its picker at ToDate.
+  Future<void> _pickFromDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _fromDate,
+      firstDate: _pickerFirstDate,
+      lastDate: _toDate,
+      builder: _brandedDatePicker,
+    );
+    if (picked == null) return;
+    setState(() => _fromDate = picked);
+    _load();
+  }
+
+  // ToDate can never sit before FromDate -> floor its picker at FromDate.
+  Future<void> _pickToDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _toDate,
+      firstDate: _fromDate,
+      lastDate: _pickerLastDate,
+      builder: _brandedDatePicker,
+    );
+    if (picked == null) return;
+    setState(() => _toDate = picked);
+    _load();
+  }
+
+  // Re-skins the default Material calendar in gateIQ's brand colours instead
+  // of stock Material blue: orange header/selection, ink body text, the
+  // app's rounded-card shape.
+  static Widget _brandedDatePicker(BuildContext context, Widget? child) {
+    final base = Theme.of(context);
+    return Theme(
+      data: base.copyWith(
+        colorScheme: base.colorScheme.copyWith(
+          primary: AppColors.brand,
+          onPrimary: Colors.white,
+          surface: AppColors.surface,
+          onSurface: AppColors.ink,
+        ),
+        textButtonTheme: TextButtonThemeData(
+          style: TextButton.styleFrom(foregroundColor: AppColors.brand),
+        ),
+        datePickerTheme: DatePickerThemeData(
+          backgroundColor: AppColors.surface,
+          headerBackgroundColor: AppColors.brand,
+          headerForegroundColor: Colors.white,
+          todayForegroundColor: const WidgetStatePropertyAll(AppColors.brand),
+          todayBorder: const BorderSide(color: AppColors.brand, width: 1.2),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppRadii.xl),
+          ),
+        ),
+      ),
+      child: child!,
+    );
   }
 
   List<GuardVisitor> get _filtered {
@@ -104,6 +179,20 @@ class _MonthGuestListScreenState extends State<MonthGuestListScreen> {
                         gutter,
                         AppSpacing.md,
                       ),
+                      child: _DateRangeCard(
+                        fromLabel: _dateFmt.format(_fromDate),
+                        toLabel: _dateFmt.format(_toDate),
+                        onTapFrom: _pickFromDate,
+                        onTapTo: _pickToDate,
+                      ),
+                    ),
+                    Padding(
+                      padding: EdgeInsets.fromLTRB(
+                        gutter,
+                        0,
+                        gutter,
+                        AppSpacing.md,
+                      ),
                       child: PillSearchField(
                         controller: _search,
                         hint: "Search this month's guests",
@@ -133,6 +222,145 @@ class _MonthGuestListScreenState extends State<MonthGuestListScreen> {
                   ],
                 ),
               ),
+      ),
+    );
+  }
+}
+
+/// Unified "From — To" date-range control: one bordered card, split by a
+/// hairline divider, matching the app's card/border look instead of two
+/// separate floating pills.
+class _DateRangeCard extends StatelessWidget {
+  const _DateRangeCard({
+    required this.fromLabel,
+    required this.toLabel,
+    required this.onTapFrom,
+    required this.onTapTo,
+  });
+
+  final String fromLabel;
+  final String toLabel;
+  final VoidCallback onTapFrom;
+  final VoidCallback onTapTo;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(AppRadii.lg),
+        border: Border.all(color: AppColors.border, width: 1.2),
+        boxShadow: AppShadows.card,
+      ),
+      child: IntrinsicHeight(
+        child: Row(
+          children: [
+            Expanded(
+              child: _DateCell(
+                label: 'From Date',
+                value: fromLabel,
+                onTap: onTapFrom,
+                radius: const BorderRadius.horizontal(
+                  left: Radius.circular(AppRadii.lg),
+                ),
+              ),
+            ),
+            const VerticalDivider(
+              width: 1,
+              thickness: 1,
+              color: AppColors.borderSoft,
+            ),
+            Expanded(
+              child: _DateCell(
+                label: 'To Date',
+                value: toLabel,
+                onTap: onTapTo,
+                radius: const BorderRadius.horizontal(
+                  right: Radius.circular(AppRadii.lg),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// One half of [_DateRangeCard]: brand-tinted icon badge + label + value.
+class _DateCell extends StatelessWidget {
+  const _DateCell({
+    required this.label,
+    required this.value,
+    required this.onTap,
+    required this.radius,
+  });
+
+  final String label;
+  final String value;
+  final VoidCallback onTap;
+  final BorderRadius radius;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context).textTheme;
+    return Material(
+      color: Colors.transparent,
+      borderRadius: radius,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: radius,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.md,
+            vertical: AppSpacing.sm,
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 30,
+                height: 30,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: AppColors.brandTint,
+                  borderRadius: BorderRadius.circular(AppRadii.sm),
+                ),
+                child: const Icon(
+                  Icons.calendar_today_rounded,
+                  size: 14,
+                  color: AppColors.brand,
+                ),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      label.toUpperCase(),
+                      style: t.labelSmall?.copyWith(
+                        color: AppColors.faint,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                    const SizedBox(height: 1),
+                    Text(
+                      value,
+                      style: t.bodyMedium?.copyWith(
+                        color: AppColors.ink,
+                        fontWeight: FontWeight.w700,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

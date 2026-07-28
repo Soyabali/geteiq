@@ -467,7 +467,7 @@ class _ManualTabState extends State<_ManualTab> {
 }
 
 class _GuestRow extends StatelessWidget {
-  const _GuestRow({
+  const  _GuestRow({
     required this.guest,
     required this.selected,
     required this.onTap,

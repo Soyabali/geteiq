@@ -24,6 +24,15 @@ class _InviteDetailsScreenState extends State<InviteDetailsScreen> {
   bool _creating = false;
 
   @override
+  void initState() {
+    super.initState();
+    // Mirror the note onto the invite as it is typed. "Add Guests" pops this
+    // screen and coming back builds a NEW InviteDetailsScreen, which seeds
+    // _note from widget.invite.note — without this the text would be lost.
+    _note.addListener(() => widget.invite.note = _note.text);
+  }
+
+  @override
   void dispose() {
     _note.dispose();
     super.dispose();

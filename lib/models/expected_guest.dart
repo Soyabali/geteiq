@@ -17,17 +17,20 @@ class ExpectedGuest {
     required this.name,
     required this.when,
     required this.stage,
+    this.qrCodeVal = '',
     this.plus = 0,
-    this.people = '',
+    this.requestedBy = '',
     this.phone = '',
     this.duration = '—',
     this.note = '—',
     this.approval = 'APPROVED',
   });
 
-  final String name;
+  /// sQRCodeVal from the list API — the id the status-update API needs.
+  final String qrCodeVal;
+  final String name; // sGuestNames — "Ram, Shyam, Anil"
   final int plus; // extra guests count, e.g. +3
-  final String people; // "Ram, Shyam, Anil" — empty -> show [phone] instead
+  final String requestedBy; // sUserName — the host who raised the request
   final String phone;
   final String when; // "Today · 4:30 PM"
   final String duration; // "3 hrs"
@@ -37,9 +40,10 @@ class ExpectedGuest {
 
   /// Returns a copy with a new stage (used when the guard taps an action).
   ExpectedGuest copyWith({GuestStage? stage}) => ExpectedGuest(
+    qrCodeVal: qrCodeVal,
     name: name,
     plus: plus,
-    people: people,
+    requestedBy: requestedBy,
     phone: phone,
     when: when,
     duration: duration,
@@ -48,7 +52,8 @@ class ExpectedGuest {
     stage: stage ?? this.stage,
   );
 
-  String get searchText => '$name $people $phone $note'.toLowerCase();
+  String get searchText =>
+      '$name $requestedBy $phone $note'.toLowerCase();
 }
 
 /// Static sample data for the Expected Guests screen (guard view).
@@ -57,7 +62,7 @@ const List<ExpectedGuest> kExpectedGuestsDemo = [
   ExpectedGuest(
     name: 'Ram Kumar',
     plus: 3,
-    people: 'Ram, Shyam, Anil',
+    requestedBy: 'Ram, Shyam, Anil',
     when: 'Today · 4:30 PM',
     duration: '3 hrs',
     note: 'HR interview panel',
@@ -66,7 +71,7 @@ const List<ExpectedGuest> kExpectedGuestsDemo = [
   ExpectedGuest(
     name: 'Priya Mehta',
     plus: 1,
-    people: 'Priya, Kabir',
+    requestedBy: 'Priya, Kabir',
     when: 'Today · 11:10 AM',
     duration: '2 hrs',
     note: 'Sales demo',
@@ -91,7 +96,7 @@ const List<ExpectedGuest> kExpectedGuestsDemo = [
   ExpectedGuest(
     name: 'Rohit Verma',
     plus: 2,
-    people: 'Rohit, Sana, Dev',
+    requestedBy: 'Rohit, Sana, Dev',
     when: 'Today · 2:00 PM',
     duration: '1 hr 30 min',
     note: 'Client visit',

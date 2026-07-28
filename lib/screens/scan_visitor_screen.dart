@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
+import '../services/VMSGaurdUpdateStatus.dart';
 import '../theme/tokens.dart';
 
 /// Guard-only screen: opens the camera, reads a visitor QR/barcode pass, and
@@ -22,11 +23,104 @@ class _ScanVisitorScreenState extends State<ScanVisitorScreen> {
 
   String? _raw; // the scanned text (null while still scanning)
   bool _torchOn = false;
+  bool _submitting = false; // "Done" -> status api in progress
 
   @override
   void dispose() {
     _controller.dispose();
     super.dispose();
+  }
+
+  /// "Done" -> mark this pass checked-in (iStatus = 2) using the scanned code
+  /// as sQRCodeVal, then toast the server's reply.
+  Future<void> _done() async {
+    final code = _raw?.trim() ?? '';
+    if (code.isEmpty || _submitting) return;
+
+    // Grabbed before awaiting so the toast still shows after this route pops.
+    final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
+    setState(() => _submitting = true);
+
+    try {
+      final res = await GuardUpdateStatusRepo().updateStatus(
+        context,
+        code,
+        GuardStatus.checkIn, // iStatus = "2"
+      );
+      if (!mounted) return;
+
+      final result = "${res['Result']}";
+      final msg = "${res['Msg']}";
+      final ok = result == "1";
+
+      _toast(
+        messenger,
+        msg.isEmpty
+            ? (ok ? 'Check-in updated' : 'Could not update the status.')
+            : msg,
+        ok: ok,
+      );
+
+      // Success -> close the scanner. Failure -> stay put so the guard can
+      // re-scan instead of losing the camera.
+      if (ok) {
+        navigator.pop();
+      } else {
+        setState(() => _submitting = false);
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _submitting = false);
+      _toast(messenger, 'Something went wrong. Please try again.', ok: false);
+    }
+  }
+
+  /// Floating toast. Takes the messenger rather than reading it off `context`
+  /// so it survives this screen being popped.
+  void _toast(
+    ScaffoldMessengerState messenger,
+    String message, {
+    required bool ok,
+  }) {
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: ok ? AppColors.success : AppColors.danger,
+          elevation: 6,
+          duration: const Duration(seconds: 3),
+          margin: const EdgeInsets.all(AppSpacing.lg),
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.lg,
+            vertical: AppSpacing.md,
+          ),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppRadii.md),
+          ),
+          content: Row(
+            children: [
+              Icon(
+                ok ? Icons.check_circle_rounded : Icons.error_outline_rounded,
+                color: Colors.white,
+                size: 20,
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: Text(
+                  message,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 14,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
   }
 
   void _onDetect(BarcodeCapture capture) {
@@ -198,8 +292,9 @@ class _ScanVisitorScreenState extends State<ScanVisitorScreen> {
               alignment: Alignment.bottomCenter,
               child: _ResultCard(
                 details: _details(_raw!),
+                submitting: _submitting,
                 onScanAgain: _scanAgain,
-                onDone: () => Navigator.of(context).maybePop(),
+                onDone: _done,
               ),
             ),
         ],
@@ -241,11 +336,13 @@ class _ScanFrame extends StatelessWidget {
 class _ResultCard extends StatelessWidget {
   const _ResultCard({
     required this.details,
+    required this.submitting,
     required this.onScanAgain,
     required this.onDone,
   });
 
   final List<MapEntry<String, String>> details;
+  final bool submitting;
   final VoidCallback onScanAgain;
   final VoidCallback onDone;
 
@@ -306,7 +403,7 @@ class _ResultCard extends StatelessWidget {
               children: [
                 Expanded(
                   child: OutlinedButton(
-                    onPressed: onScanAgain,
+                    onPressed: submitting ? null : onScanAgain,
                     style: OutlinedButton.styleFrom(
                       foregroundColor: AppColors.brand,
                       side: const BorderSide(color: AppColors.brand),
@@ -321,7 +418,7 @@ class _ResultCard extends StatelessWidget {
                 const SizedBox(width: AppSpacing.md),
                 Expanded(
                   child: FilledButton(
-                    onPressed: onDone,
+                    onPressed: submitting ? null : onDone,
                     style: FilledButton.styleFrom(
                       backgroundColor: AppColors.brand,
                       padding: const EdgeInsets.symmetric(vertical: 14),
@@ -329,7 +426,16 @@ class _ResultCard extends StatelessWidget {
                         borderRadius: BorderRadius.circular(AppRadii.md),
                       ),
                     ),
-                    child: const Text('Done'),
+                    child: submitting
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Text('Done'),
                   ),
                 ),
               ],

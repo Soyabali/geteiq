@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 
 import '../models/expected_guest.dart';
 import '../models/guard_visitor.dart';
+import '../services/VMSGaurdUpdateStatus.dart';
 import '../services/VMSGaurdVisitorRequestList.dart';
 import '../theme/tokens.dart';
 import '../widgets/app_card.dart';
@@ -14,6 +15,8 @@ import 'scan_visitor_screen.dart';
 ///
 /// Search + 4 stage filters (Expected / Check-in / Meeting / Check-out) + a
 /// list of guest cards. Data comes from the VMSGaurdVisitorRequestList API.
+
+
 class ExpectedGuestScreen extends StatefulWidget {
   const ExpectedGuestScreen({super.key});
 
@@ -63,7 +66,7 @@ class _ExpectedGuestScreenState extends State<ExpectedGuestScreen> {
 
   // Maps one API row -> the card's UI model.
   ExpectedGuest _mapToExpected(GuardVisitor v) {
-    // sGuestNames may be a comma list -> show "(names)" + a "+N" badge.
+    // sGuestNames may be a comma list -> the "+N" badge beside the name.
     final names = v.guestNames
         .split(',')
         .map((s) => s.trim())
@@ -72,9 +75,10 @@ class _ExpectedGuestScreenState extends State<ExpectedGuestScreen> {
     final plus = names.length > 1 ? names.length - 1 : 0;
 
     return ExpectedGuest(
-      name: v.userName, // sUserName -> card name
+      qrCodeVal: v.qrCodeVal, // sQRCodeVal -> sent to the status-update api
+      name: v.guestNames, // sGuestNames -> card name (top line)
       plus: plus,
-      people: v.guestNames, // sGuestNames -> shown in ( )
+      requestedBy: v.userName, // sUserName -> "RequestedBy :" line
       // phone: not returned by this API -> left empty. // TODO: change if added
       when: _formatWhen(v.date, v.time), // dDate + dTime
       duration: v.validHours.isEmpty ? '—' : v.validHours, // iValidHours
@@ -134,10 +138,97 @@ class _ExpectedGuestScreenState extends State<ExpectedGuestScreen> {
     setState(() => _stageFilter = _stageFilter == stage ? null : stage);
   }
 
-  void _setStage(ExpectedGuest guest, GuestStage stage) {
-    final i = _all.indexOf(guest);
-    if (i < 0) return;
-    setState(() => _all[i] = guest.copyWith(stage: stage));
+  /// Pushes a new status to the backend, then reflects it on the card.
+  ///
+  /// [stage] is the local UI stage to move the card into once the API says
+  /// OK; it is null for "Approved", which is a badge action and does not
+  /// change which flow button is highlighted.
+  Future<void> _updateStatus(
+    ExpectedGuest guest,
+    GuardStatus status, {
+    GuestStage? stage,
+  }) async {
+    // No pass id -> nothing the backend can match on.
+    if (guest.qrCodeVal.isEmpty) {
+      _toast('No QR code on this pass.', ok: false);
+      return;
+    }
+
+    try {
+      final res = await GuardUpdateStatusRepo().updateStatus(
+        context,
+        guest.qrCodeVal,
+        status,
+      );
+      if (!mounted) return;
+
+      final result = "${res['Result']}";
+      final msg = "${res['Msg']}";
+
+      if (result == "1") {
+        // Success -> move the card into its new stage locally so the guard
+        // sees the change without a full reload.
+        if (stage != null) {
+          final i = _all.indexOf(guest);
+          if (i >= 0) setState(() => _all[i] = guest.copyWith(stage: stage));
+        }
+        _toast(msg.isEmpty ? '${status.label} updated' : msg, ok: true);
+      } else {
+        _toast(msg.isEmpty ? 'Could not update the status.' : msg, ok: false);
+      }
+    } catch (e) {
+      if (!mounted) return;
+      _toast('Something went wrong. Please try again.', ok: false);
+    }
+  }
+
+  /// Floating, rounded toast in the app's brand colours.
+  void _toast(String message, {required bool ok}) {
+    final gutter = AppSpacing.gutter(context);
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: ok ? AppColors.success : AppColors.danger,
+          elevation: 6,
+          duration: const Duration(seconds: 2),
+          margin: EdgeInsets.fromLTRB(
+            gutter,
+            0,
+            gutter,
+            AppSpacing.lg,
+          ),
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.lg,
+            vertical: AppSpacing.md,
+          ),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppRadii.md),
+          ),
+          content: Row(
+            children: [
+              Icon(
+                ok
+                    ? Icons.check_circle_rounded
+                    : Icons.error_outline_rounded,
+                color: Colors.white,
+                size: 20,
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: Text(
+                  message,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
   }
 
   @override
@@ -213,13 +304,36 @@ class _ExpectedGuestScreenState extends State<ExpectedGuestScreen> {
                                 AppSpacing.xxl,
                               ),
                               itemCount: rows.length,
+                              // Wider than the gap inside a guest's own two
+                              // cards, so each pair still reads as one entry.
                               separatorBuilder: (_, __) =>
-                                  const SizedBox(height: AppSpacing.md),
+                                  const SizedBox(height: AppSpacing.xl),
                               itemBuilder: (context, i) {
                                 final g = rows[i];
                                 return _GuestCard(
                                   guest: g,
-                                  onStage: (stage) => _setStage(g, stage),
+                                  // Approved badge -> iStatus 1 (no stage move)
+                                  onApprove: () => _updateStatus(
+                                    g,
+                                    GuardStatus.approved,
+                                  ),
+                                  // Not arrived -> 4, Check-in -> 2,
+                                  // Check-out -> 3
+                                  onNotArrived: () => _updateStatus(
+                                    g,
+                                    GuardStatus.notArrived,
+                                    stage: GuestStage.expected,
+                                  ),
+                                  onCheckIn: () => _updateStatus(
+                                    g,
+                                    GuardStatus.checkIn,
+                                    stage: GuestStage.checkin,
+                                  ),
+                                  onCheckOut: () => _updateStatus(
+                                    g,
+                                    GuardStatus.checkOut,
+                                    stage: GuestStage.checkout,
+                                  ),
                                 );
                               },
                             ),
@@ -354,24 +468,41 @@ class _StatBox extends StatelessWidget {
 
 /// A single guest card with the three flow-action buttons.
 class _GuestCard extends StatelessWidget {
-  const _GuestCard({required this.guest, required this.onStage});
+  const _GuestCard({
+    required this.guest,
+    required this.onApprove,
+    required this.onNotArrived,
+    required this.onCheckIn,
+    required this.onCheckOut,
+  });
 
   final ExpectedGuest guest;
-  final ValueChanged<GuestStage> onStage;
+  final VoidCallback onApprove; // iStatus 1
+  final VoidCallback onNotArrived; // iStatus 4
+  final VoidCallback onCheckIn; // iStatus 2
+  final VoidCallback onCheckOut; // iStatus 3
 
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context).textTheme;
 
-    return AppCard(
-      padding: const EdgeInsets.all(AppSpacing.lg),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Name (+plus)  ...........................  APPROVED
-          Row(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // ---- Card 1: details. Two lanes — text on the left, badge + scan
+        // icon on the right, so the icon no longer adds height of its own
+        // (that was the empty gap under the name).
+        AppCard(
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.lg,
+            AppSpacing.lg,
+            5,
+            AppSpacing.sm,
+          ),
+          child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Left lane — takes almost the full width.
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -401,50 +532,56 @@ class _GuestCard extends StatelessWidget {
                         ],
                       ],
                     ),
-                    const SizedBox(height: 2),
+                    const SizedBox(height: AppSpacing.sm),
+                    _MetaLine(
+                      label: 'RequestedBy :',
+                      value: guest.requestedBy.isEmpty
+                          ? '—'
+                          : guest.requestedBy,
+                    ),
+                    _MetaLine(label: 'Date, Time:', value: guest.when),
+                    _MetaLine(
+                      label: 'Meeting duration:',
+                      value: guest.duration,
+                    ),
+                    _MetaLine(label: 'Note:', value: guest.note),
+                    const SizedBox(height: AppSpacing.xs),
                     Text(
-                      guest.people.isNotEmpty
-                          ? '(${guest.people})'
-                          : guest.phone,
-                      style: t.bodySmall?.copyWith(color: AppColors.faint),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                      'Status: ${guest.stage.label}',
+                      style: t.bodySmall?.copyWith(
+                        color: AppColors.faint,
+                        fontSize: 11,
+                      ),
                     ),
                   ],
                 ),
               ),
               const SizedBox(width: AppSpacing.sm),
+              // Right lane — badge + scan icon, 5dp off the card edge.
               Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  _ApprovedBadge(label: guest.approval),
-                  const SizedBox(height: AppSpacing.xs),
+                  _ApprovedBadge(label: guest.approval, onTap: onApprove),
+                  const SizedBox(height: AppSpacing.sm),
                   const _ScanIconButton(),
                 ],
               ),
             ],
           ),
-          const SizedBox(height: AppSpacing.md),
+        ),
+        const SizedBox(height: AppSpacing.xs),
 
-          // Meta lines
-          _MetaLine(label: 'Date, Time:', value: guest.when),
-          _MetaLine(label: 'Meeting duration:', value: guest.duration),
-          _MetaLine(label: 'Note:', value: guest.note),
-          const SizedBox(height: AppSpacing.xs),
-          Text(
-            'Status: ${guest.stage.label}',
-            style: t.bodySmall?.copyWith(color: AppColors.faint, fontSize: 11),
-          ),
-          const SizedBox(height: AppSpacing.md),
-
-          // Action buttons
-          Row(
+        // ---- Card 2: the three flow actions (same handlers as before).
+        AppCard(
+          padding: const EdgeInsets.all(AppSpacing.md),
+          child: Row(
             children: [
               Expanded(
                 child: _ActBtn(
                   label: 'Not arrived',
                   active: guest.stage == GuestStage.expected,
-                  onTap: () => onStage(GuestStage.expected),
+                  onTap: onNotArrived,
                 ),
               ),
               const SizedBox(width: AppSpacing.sm),
@@ -454,7 +591,7 @@ class _GuestCard extends StatelessWidget {
                   active:
                       guest.stage == GuestStage.checkin ||
                       guest.stage == GuestStage.meeting,
-                  onTap: () => onStage(GuestStage.checkin),
+                  onTap: onCheckIn,
                 ),
               ),
               const SizedBox(width: AppSpacing.sm),
@@ -462,13 +599,13 @@ class _GuestCard extends StatelessWidget {
                 child: _ActBtn(
                   label: 'Check-out',
                   active: guest.stage == GuestStage.checkout,
-                  onTap: () => onStage(GuestStage.checkout),
+                  onTap: onCheckOut,
                 ),
               ),
             ],
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
@@ -504,27 +641,32 @@ class _MetaLine extends StatelessWidget {
   }
 }
 
-/// Green "APPROVED" pill.
+/// Green "APPROVED" pill. Tapping it pushes iStatus = 1 to the backend.
 class _ApprovedBadge extends StatelessWidget {
-  const _ApprovedBadge({required this.label});
+  const _ApprovedBadge({required this.label, required this.onTap});
 
   final String label;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-      decoration: BoxDecoration(
-        color: AppColors.success.withValues(alpha: 0.12),
+    return Material(
+      color: AppColors.success.withValues(alpha: 0.12),
+      borderRadius: BorderRadius.circular(AppRadii.pill),
+      child: InkWell(
+        onTap: onTap,
         borderRadius: BorderRadius.circular(AppRadii.pill),
-      ),
-      child: Text(
-        label.toUpperCase(),
-        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-          color: AppColors.success,
-          fontWeight: FontWeight.w700,
-          fontSize: 10.5,
-          letterSpacing: 0.4,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+          child: Text(
+            label.toUpperCase(),
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+              color: AppColors.success,
+              fontWeight: FontWeight.w700,
+              fontSize: 10.5,
+              letterSpacing: 0.4,
+            ),
+          ),
         ),
       ),
     );
@@ -544,12 +686,14 @@ class _ScanIconButton extends StatelessWidget {
       icon: const Icon(
         Icons.qr_code_scanner_rounded,
         color: AppColors.ink,
-        size: 20,
+        size: 28,
       ),
       tooltip: 'Scan Visitor QR Pass',
       visualDensity: VisualDensity.compact,
       padding: EdgeInsets.zero,
-      constraints: const BoxConstraints(),
+      // Keeps the glyph at least 25dp on every side without the default
+      // 48dp IconButton box pushing the card wider.
+      constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
       onPressed: () => Navigator.of(context).push(
         MaterialPageRoute<void>(builder: (_) => const ScanVisitorScreen()),
       ),

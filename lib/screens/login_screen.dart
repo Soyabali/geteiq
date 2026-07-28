@@ -20,9 +20,10 @@ import 'dashboard_screen.dart';
 /// Flow:
 ///   1) Enter a valid 10-digit number -> tap "Send OTP" -> FIRST api (getOtp),
 ///      spinner shows inside the Send OTP button.
-///   2) On success the OTP box appears. Typing the 4 digits (test: 1982)
-///      auto-fires the SECOND api (validateOtp) with otp + mobile.
-///   3) Any api failure shows the reusable [FailureDialog].
+///   2) On success the OTP box appears. Typing the 4 digits auto-fires the
+///      SECOND api (validateOtp) with the typed otp + mobile.
+///   3) A failed getOtp shows the reusable [FailureDialog]; a failed
+///      validateOtp toasts the server message and keeps the user here.
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key, this.role = UserRole.management});
 
@@ -51,8 +52,6 @@ class _LoginScreenState extends State<LoginScreen> {
     _phone.addListener(() => setState(() {}));
     _otp.addListener(() => setState(() {}));
   }
-
-
 
 
   @override
@@ -125,7 +124,7 @@ class _LoginScreenState extends State<LoginScreen> {
     FocusScope.of(context).unfocus();
     setState(() => _verifying = true);
 
-    final otpNumber = _otp.text.trim(); // test OTP: 1982
+    final otpNumber = _otp.text.trim(); // whatever the user typed in the boxes
     final phoneNumber = _digits;
 
     try {
@@ -157,21 +156,60 @@ class _LoginScreenState extends State<LoginScreen> {
           (route) => false,
         );
       } else {
-        await FailureDialog.show(
-          context,
-          msg.isEmpty ? 'Invalid OTP. Please try again.' : msg,
-        );
+        // Result == "0" -> stay on this screen, just toast the server message.
+        _toast(msg.isEmpty ? 'Invalid OTP. Please try again.' : msg);
+        // Clear the boxes and refocus so the user can retype straight away.
+        _otp.clear();
+        _otpFocus.requestFocus();
       }
     } catch (e) {
       print("------login error----------$e");
       if (!mounted) return;
-      await FailureDialog.show(
-        context,
-        'Something went wrong. Please try again.',
-      );
+      _toast('Something went wrong. Please try again.');
     } finally {
       if (mounted) setState(() => _verifying = false);
     }
+  }
+
+  /// Floating red toast — used for OTP failures so the user stays put.
+  void _toast(String message) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: AppColors.danger,
+          elevation: 6,
+          duration: const Duration(seconds: 3),
+          margin: const EdgeInsets.all(AppSpacing.lg),
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.lg,
+            vertical: AppSpacing.md,
+          ),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppRadii.md),
+          ),
+          content: Row(
+            children: [
+              const Icon(
+                Icons.error_outline_rounded,
+                color: Colors.white,
+                size: 20,
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: Text(
+                  message,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
   }
 
   static String _formatted(String digits) => digits.length == 10

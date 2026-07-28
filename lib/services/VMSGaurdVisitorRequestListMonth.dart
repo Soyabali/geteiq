@@ -17,13 +17,19 @@ import 'baseurl.dart';
 /// and [GuardVisitorYesterdayRepo] (VMSGaurdVisitorRequestListYesterday.dart)
 /// — only the date range in the request body differs.
 class GuardVisitorMonthRepo {
-  Future<List<GuardVisitor>> getVisitorList(BuildContext context) async {
+  /// [fromDate] / [toDate] default to the current calendar month (1st ->
+  /// last day) when not supplied, so existing callers keep working unchanged.
+  Future<List<GuardVisitor>> getVisitorList(
+    BuildContext context, {
+    DateTime? fromDate,
+    DateTime? toDate,
+  }) async {
     try {
       final now = DateTime.now();
-      final firstDay = DateTime(now.year, now.month, 1);
+      final firstDay = fromDate ?? DateTime(now.year, now.month, 1);
       // Day 0 of next month == the last day of this month (Dart normalises
       // the month overflow, so this also works correctly for December).
-      final lastDay = DateTime(now.year, now.month + 1, 0);
+      final lastDay = toDate ?? DateTime(now.year, now.month + 1, 0);
 
       final fmt = DateFormat('dd/MMM/yyyy');
       final body = {
