@@ -1,6 +1,8 @@
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/invite.dart';
+import '../services/vmsUpdateVisitorGsmid.dart';
 import '../theme/tokens.dart';
 import '../widgets/app_button.dart';
 import '../widgets/app_card.dart';
@@ -77,19 +79,46 @@ class _DashboardHeader extends StatefulWidget {
 
 class _DashboardHeaderState extends State<_DashboardHeader> {
   String _name = ''; // sUserName from login
+  String _contactNo = ''; // sContactNo from login
   bool _isGuard = false; // iUserType == "1"
 
   @override
   void initState() {
     super.initState();
+    _setupPushNotifications();
     _load();
   }
+
+  // firebase related code
+  void _setupPushNotifications() async {
+    final fcm = FirebaseMessaging.instance;
+    final token = await fcm.getToken();
+    print("-------69--------firebase token------$token");
+    print("Token : $token");
+    //updateGsmid(token);
+    if(token!=null){
+      updateGsmid(token);
+    }
+  }
+  // FirebaseTokenApi
+  updateGsmid(token) async {
+    if (token != null) {
+      print("--------106----xxx----$token");
+      var UpdateGsmid = await VmsUpdateVisitorgsmid().vmsUpdateVisitorGsmid(
+        context,
+        token,
+      );
+      print("-------Update Gsmid Visitor-------70-----$UpdateGsmid");
+    } else {}
+  }
+
 
   Future<void> _load() async {
     final prefs = await SharedPreferences.getInstance();
     if (!mounted) return;
     setState(() {
       _name = (prefs.getString('sUserName') ?? '').trim();
+      _contactNo = (prefs.getString('sContactNo') ?? '').trim();
       _isGuard = (prefs.getString('iUserType') ?? '').trim() == "1";
     });
   }
@@ -111,8 +140,6 @@ class _DashboardHeaderState extends State<_DashboardHeader> {
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context).textTheme;
-    // Guard vs management group label shown below the login name.
-    final groupLabel = _isGuard ? 'Guard Group' : 'Mgmt Group';
 
     return Row(
       children: [
@@ -130,7 +157,7 @@ class _DashboardHeaderState extends State<_DashboardHeader> {
               ),
               const SizedBox(height: 2),
               Text(
-                groupLabel,
+                _contactNo,
                 style: t.bodySmall?.copyWith(color: AppColors.muted),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,

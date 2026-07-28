@@ -12,7 +12,6 @@ import '../services/getOtp.dart';
 import '../services/validateOtp.dart';
 import '../services/vmsUpdateVisitorGsmid.dart';
 import '../theme/tokens.dart';
-import '../widgets/app_button.dart';
 import '../widgets/failure_dialog.dart';
 import 'dashboard_screen.dart';
 
@@ -51,29 +50,9 @@ class _LoginScreenState extends State<LoginScreen> {
     super.initState();
     _phone.addListener(() => setState(() {}));
     _otp.addListener(() => setState(() {}));
-    _setupPushNotifications();
   }
 
-  void _setupPushNotifications() async {
-    final fcm = FirebaseMessaging.instance;
-    final token = await fcm.getToken();
-    print("Token : $token");
-    //updateGsmid(token);
-    if(token!=null){
-      updateGsmid(token);
-    }
-  }
-  // FirebaseTokenApi
-  updateGsmid(token) async {
-    if (token != null) {
-      print("--------68----xxx----$token");
-      var UpdateGsmid = await VmsUpdateVisitorgsmid().vmsUpdateVisitorGsmid(
-        context,
-        token,
-      );
-      print("-------Update Gsmid Visitor-------70-----$UpdateGsmid");
-    } else {}
-  }
+
 
 
   @override
@@ -168,6 +147,7 @@ class _LoginScreenState extends State<LoginScreen> {
         await prefs.setString('sContactNo', "${res['sContactNo']}");
         await prefs.setString('iUserType', "${res['iUserType']}");
         await prefs.setString('sEmailId', "${res['sEmailId']}");
+        await prefs.setString('iUserId', "${res['iUserId']}");// to pass iUserId to diff api
         await prefs.setBool('isLoggedIn', true);
         if (!mounted) return;
 
@@ -284,42 +264,20 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     const SizedBox(height: AppSpacing.lg),
 
-                    // OTP card (after send) OR the hint box (before send).
+                    // OTP card, shown only after "Send OTP" succeeds.
                     AnimatedSize(
                       duration: const Duration(milliseconds: 300),
                       curve: Curves.easeOutCubic,
                       alignment: Alignment.topCenter,
-                      child: _otpSent ? _otpCard(t) : _infoBox(t),
+                      child: _otpSent
+                          ? _otpCard(t)
+                          : const SizedBox(width: double.infinity),
                     ),
                   ],
                 ),
               ),
             ),
 
-            // ---- Bottom: primary button + policy line ----
-            Padding(
-              padding: const EdgeInsets.fromLTRB(
-                AppSpacing.lg,
-                AppSpacing.md,
-                AppSpacing.lg,
-                AppSpacing.xl,
-              ),
-              child: Column(
-                children: [
-                  PrimaryButton(
-                    label: _isGuard ? 'Enter Guard Desk' : 'Enter Dashboard',
-                    loading: _verifying,
-                    onPressed: _canLogin ? _verifyOtp : null,
-                  ),
-                  const SizedBox(height: AppSpacing.md),
-                  Text(
-                    'By continuing you agree to visitor policy',
-                    textAlign: TextAlign.center,
-                    style: t.labelSmall?.copyWith(color: AppColors.faint),
-                  ),
-                ],
-              ),
-            ),
           ],
         ),
       ),
@@ -404,7 +362,26 @@ class _LoginScreenState extends State<LoginScreen> {
             onCompleted: (_) => _verifyOtp(), // auto-fire the second api
           ),
           const SizedBox(height: AppSpacing.md),
-          Row(
+          if (_verifying)
+            Row(
+              children: [
+                const SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: AppColors.brand,
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.sm),
+                Text(
+                  'Verifying OTP…',
+                  style: t.bodySmall?.copyWith(color: AppColors.faint),
+                ),
+              ],
+            )
+          else
+            Row(
             children: [
               Flexible(
                 child: Text(
@@ -431,37 +408,6 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  // ---- Hint box (before OTP is sent) ----
-  Widget _infoBox(TextTheme t) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(AppSpacing.md),
-      decoration: BoxDecoration(
-        color: const Color(0xFFFFF7F2),
-        borderRadius: BorderRadius.circular(AppRadii.lg),
-        border: Border.all(color: AppColors.brand.withValues(alpha: 0.35)),
-      ),
-      child: Text.rich(
-        TextSpan(
-          style: t.bodySmall?.copyWith(
-            color: const Color(0xFF9A5A38),
-            height: 1.45,
-          ),
-          children: const [
-            TextSpan(text: 'Enter your mobile number and tap '),
-            TextSpan(
-              text: 'Send OTP',
-              style: TextStyle(fontWeight: FontWeight.w800),
-            ),
-            TextSpan(
-              text:
-                  ' to continue. One login keeps guest flow secure from lobby to flat.',
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 }
 
 /// Gradient hero card at the top of the login screen.

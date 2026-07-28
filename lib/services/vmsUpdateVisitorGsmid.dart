@@ -14,11 +14,11 @@ class VmsUpdateVisitorgsmid {
     // sharedPreference
     SharedPreferences prefs = await SharedPreferences.getInstance();
     //String? sToken = prefs.getString('sToken');
-    String? iUserId = prefs.getString('iUserType');// iUserType
+    String? iUserId = prefs.getString('iUserId');// iUserType
 
     try {
       print("----firebase Token------22----------$token");
-      print("----iUserId   --23-----$iUserId");
+      print("----iUserId   --21-----$iUserId");
 
       var baseURL = BaseRepo().baseurl;
       var endPoint = "UdpateGSMId/UdpateGSMId";
@@ -36,7 +36,7 @@ class VmsUpdateVisitorgsmid {
       request.body = json.encode(
           {
             "iUserId": iUserId,
-           // "sGSMid":token,
+            "sGSMid":token,
           });
       request.headers.addAll(headers);
       http.StreamedResponse response = await request.send();

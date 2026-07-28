@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/invite.dart';
 import '../widgets/loader_helper.dart';
@@ -45,12 +46,17 @@ class PreApprovalVisitorRepo {
       }).toList();
       final guestList = json.encode(guestMaps); // -> proper JSON string
 
+      // iRequestedBy -> iUserId stored at login time.
+      final prefs = await SharedPreferences.getInstance();
+      final iUserId = prefs.getString('iUserId') ?? '0';
+      print('----PreApproval iUserId (from SharedPreferences)----> $iUserId');
+
       var body = {
         "dDate": dDate,
         "dTime": dTime,
         "iValidHours": iValidHours,
         "sNote": invite.note,
-        "iRequestedBy": "0", // TODO: put the logged-in user id here later
+        "iRequestedBy": iUserId,
         "GuestList": guestList,
       };
       print('----PreApproval BODY----> $body');
