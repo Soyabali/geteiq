@@ -185,7 +185,7 @@ class _YesterdayGuestCard extends StatelessWidget {
           ),
           const _RowDivider(),
           _LogRow(
-            label: 'Meet with :',
+            label: 'RequestedBy :',
             value: visitor.userName.isEmpty ? '—' : visitor.userName,
           ),
         ],
