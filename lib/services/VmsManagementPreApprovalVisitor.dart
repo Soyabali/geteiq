@@ -53,18 +53,46 @@ class PreApprovalVisitorRepo {
       }).toList();
       final guestList = json.encode(guestMaps); // -> proper JSON string
 
-      // iRequestedBy -> iUserId stored at login time.
+      // ---------- iRequestedBy: depends on WHO is logged in ----------
+      //
+      //   Guard      (iUserType == "1") -> the iUserId picked in the
+      //                                    "Meet With" dropdown on the guard's
+      //                                    Add Guest screen (the person the
+      //                                    visitor has come to meet).
+      //   Management (iUserType == "2") -> the logged-in user's OWN iUserId,
+      //                                    saved in SharedPreferences at login.
+      //
+      // Careful: both are called "iUserId" but they come from different places
+      // — the dropdown one is per-guest, the login one is per-session.
       final prefs = await SharedPreferences.getInstance();
-      final iUserId = prefs.getString('iUserId') ?? '0';
-      print('----PreApproval iUserId (from SharedPreferences)----> $iUserId');
+      final isGuard = (prefs.getString('iUserType') ?? '').trim() == "1";
+      final loginUserId = prefs.getString('iUserId') ?? '0'; // saved at login
+
+      // Guard flow: take the first guest that actually has a "Meet With"
+      // selection. Falls back to "0" if somehow nothing was picked.
+      String meetWithUserId = '0';
+      for (final g in invite.guests) {
+        if (g.departmentId != null) {
+          meetWithUserId = g.departmentId.toString();
+          break;
+        }
+      }
+
+      final iRequestedBy = isGuard ? meetWithUserId : loginUserId;
+      print('----PreApproval isGuard----> $isGuard');
+      print('----PreApproval iUserId (login, SharedPreferences)----> $loginUserId');
+      print('----PreApproval iUserId (Meet With dropdown)----> $meetWithUserId');
+      print('----PreApproval iRequestedBy (sent)----> $iRequestedBy');
 
       var body = {
         "dDate": dDate,
         "dTime": dTime,
         "iValidHours": iValidHours,
         "sNote": invite.note,
-        "iRequestedBy": iUserId,
+        "iRequestedBy": iRequestedBy,
+        "iEntryUserId": loginUserId,
         "GuestList": guestList,
+
       };
       print('----PreApproval BODY----> $body');
       print('----PreApproval GuestList----> $guestList');

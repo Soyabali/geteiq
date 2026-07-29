@@ -29,13 +29,13 @@ class _GuardAddManuallyScreenState extends State<GuardAddManuallyScreen> {
   final _phone = TextEditingController();
   final _formKey = GlobalKey<FormState>();
 
-  // Department dropdown — options now come from the VMSUsers API instead of
-  // a static list. Each option carries BOTH `iUserId` and `sUserName`
-  // together (see VmsUser), since the next API call needs the id, not just
-  // the label.
+  // "Meet With" dropdown — the person the visitor has come to meet. Options
+  // come from the VMSUsers API. Each option carries BOTH `iUserId` and
+  // `sUserName` together (see VmsUser), because the final API call needs the
+  // id (sent as `iRequestedBy`), not just the label.
   final _usersRepo = VmsUsersRepo();
-  List<VmsUser> _departments = [];
-  bool _loadingDepartments = true;
+  List<VmsUser> _meetWithOptions = [];
+  bool _loadingMeetWith = true;
   VmsUser? _selectedUser;
 
   // Guests added so far (starts from anything already on the invite).
@@ -44,26 +44,24 @@ class _GuardAddManuallyScreenState extends State<GuardAddManuallyScreen> {
   @override
   void initState() {
     super.initState();
-    _loadDepartments();
+    _loadMeetWithOptions();
   }
 
-  // Loads the Department dropdown once when the screen opens.
-  Future<void> _loadDepartments() async {
+  // Loads the "Meet With" dropdown once when the screen opens.
+  Future<void> _loadMeetWithOptions() async {
     try {
       final users = await _usersRepo.getUsers(context);
       if (!mounted) return;
       setState(() {
-        _departments = users;
-        _loadingDepartments = false;
+        _meetWithOptions = users;
+        _loadingMeetWith = false;
       });
     } catch (e) {
       if (!mounted) return;
-      setState(() => _loadingDepartments = false);
+      setState(() => _loadingMeetWith = false);
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
-        ..showSnackBar(
-          const SnackBar(content: Text('Could not load departments')),
-        );
+        ..showSnackBar(const SnackBar(content: Text('Could not load the list')));
     }
   }
 
@@ -81,7 +79,7 @@ class _GuardAddManuallyScreenState extends State<GuardAddManuallyScreen> {
       name: _name.text.trim(),
       phone: '+91 ${_phone.text.trim()}',
       department: _selectedUser?.userName, // sUserName — shown on the guest card
-      departmentId: _selectedUser?.userId, // iUserId — needed by the next API call
+      departmentId: _selectedUser?.userId, // iUserId — sent as iRequestedBy
     );
 
     setState(() => _selected.add(guest));
@@ -164,7 +162,7 @@ class _GuardAddManuallyScreenState extends State<GuardAddManuallyScreen> {
                           : null,
                     ),
                     const SizedBox(height: AppSpacing.lg),
-                    // Department dropdown — above the "Add Guest" button.
+                    // "Meet With" dropdown — above the "Add Guest" button.
                     // Backed by the VMSUsers API; `sUserName` values can run
                     // long (e.g. "Sakshi Begmal (Business Development (BD) )"),
                     // so both the closed field and each menu row are capped to
@@ -177,18 +175,16 @@ class _GuardAddManuallyScreenState extends State<GuardAddManuallyScreen> {
                       padding: EdgeInsets.zero,
                       alignment: AlignmentDirectional.centerStart,
                       decoration: InputDecoration(
-                        labelText: 'Department',
+                        labelText: 'Meet With',
                         contentPadding: const EdgeInsets.symmetric(
                           horizontal: AppSpacing.lg,
                           vertical: AppSpacing.lg,
                         ),
-                        hintText: _loadingDepartments
-                            ? 'Loading departments...'
-                            : null,
+                        hintText: _loadingMeetWith ? 'Loading...' : null,
                       ),
                       icon: const Icon(Icons.keyboard_arrow_down_rounded),
                       // What shows in the CLOSED field once a value is picked.
-                      selectedItemBuilder: (context) => _departments
+                      selectedItemBuilder: (context) => _meetWithOptions
                           .map(
                             (u) => Text(
                               u.userName,
@@ -198,7 +194,7 @@ class _GuardAddManuallyScreenState extends State<GuardAddManuallyScreen> {
                           )
                           .toList(),
                       // What shows in the OPEN menu list.
-                      items: _departments
+                      items: _meetWithOptions
                           .map(
                             (u) => DropdownMenuItem<VmsUser>(
                               value: u,
@@ -210,18 +206,18 @@ class _GuardAddManuallyScreenState extends State<GuardAddManuallyScreen> {
                             ),
                           )
                           .toList(),
-                      onChanged: _loadingDepartments
+                      onChanged: _loadingMeetWith
                           ? null
                           : (u) {
                               setState(() => _selectedUser = u);
-                              // Both values together — this is what the next
-                              // API call (adding the guest) needs to send.
+                              // The iUserId here is what finally goes out as
+                              // "iRequestedBy" on the pre-approval API call.
                               print(
-                                'Department selected -> iUserId: ${u?.userId}, sUserName: ${u?.userName}',
+                                'Meet With selected -> iUserId: ${u?.userId}, sUserName: ${u?.userName}',
                               );
                             },
                       validator: (v) =>
-                          v == null ? 'Select a department' : null,
+                          v == null ? 'Select who they are meeting' : null,
                     ),
                     const SizedBox(height: AppSpacing.xxl),
                     PrimaryButton(label: 'Add Guest', onPressed: _addGuest),
