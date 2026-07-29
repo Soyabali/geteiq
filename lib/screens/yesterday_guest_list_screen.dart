@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../models/guard_visitor.dart';
-import '../services/VMSGaurdVisitorRequestListYesterday.dart';
+import '../services/VisitorListRepo.dart';
 import '../theme/tokens.dart';
 import '../widgets/app_card.dart';
 import '../widgets/app_scaffold.dart';
@@ -12,9 +12,10 @@ import '../widgets/pill_search_field.dart';
 ///
 /// Read-only history: no approve action and no note field (unlike Gate Log),
 /// since yesterday's requests are already resolved. Data comes from
-/// [GuardVisitorYesterdayRepo].
+/// [VisitorListRepo], which picks the guard or management endpoint by the
+/// logged-in `iUserType`.
 class YesterdayGuestListScreen extends StatefulWidget {
-  const YesterdayGuestListScreen({super.key});
+  const   YesterdayGuestListScreen({super.key});
 
   @override
   State<YesterdayGuestListScreen> createState() =>
@@ -46,7 +47,13 @@ class _YesterdayGuestListScreenState extends State<YesterdayGuestListScreen> {
       _error = false;
     });
     try {
-      final list = await GuardVisitorYesterdayRepo().getVisitorList(context);
+      // Guard -> guard endpoint, manager -> management endpoint. Same rows.
+      final range = VisitorListRepo.yesterday;
+      final list = await VisitorListRepo().getVisitorList(
+        context,
+        fromDate: range.start,
+        toDate: range.end,
+      );
       if (!mounted) return;
       setState(() {
         _all = list;

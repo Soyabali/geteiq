@@ -1,14 +1,20 @@
 import 'package:flutter/material.dart';
 
-import '../models/gate_log.dart';
+import '../models/gate_entry.dart';
+import '../services/GateEntryRepo.dart';
 import '../theme/tokens.dart';
 import '../widgets/app_card.dart';
 import '../widgets/app_scaffold.dart';
 import '../widgets/pill_search_field.dart';
 
-/// "Gate Log" — guests invited by the guard. Search, then approve or reject.
+/// "Gate Log" — guests the guard logged at the gate.
 ///
-/// Static data for now ([kGateLogDemo]); swap for an API list later.
+/// Role-driven, from [GateEntryRepo]:
+///
+/// | `iUserType` | API | Card actions |
+/// |---|---|---|
+/// | `"1"` guard | `VisitorEntryByGaurd` | read-only `sAppRejStatus` chip |
+/// | else, management | `EntryByGaurd` | Approve / Reject buttons |
 class GateLogScreen extends StatefulWidget {
   const GateLogScreen({super.key});
 
@@ -19,8 +25,16 @@ class GateLogScreen extends StatefulWidget {
 class _GateLogScreenState extends State<GateLogScreen> {
   final _search = TextEditingController();
 
-  // Mutable copy so the approve / reject decisions stick.
-  late final List<GateLogEntry> _all = List.of(kGateLogDemo);
+  List<GateEntry> _all = [];
+  bool _isGuard = false; // iUserType == "1" -> hide the action buttons
+  bool _loading = true;
+  bool _error = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
 
   @override
   void dispose() {
@@ -28,22 +42,60 @@ class _GateLogScreenState extends State<GateLogScreen> {
     super.dispose();
   }
 
-  List<GateLogEntry> get _filtered {
+  // ==========================================================================
+  //  DATA
+  // ==========================================================================
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = false;
+    });
+    try {
+      final repo = GateEntryRepo();
+      // Fetch first, so `context` is used before any await. The repo picks the
+      // guard / management endpoint itself; we only re-read the same flag to
+      // decide what the card renders.
+      final rows = await repo.getGateEntries(context);
+      if (!mounted) return;
+      final isGuard = await repo.isGuard();
+      if (!mounted) return;
+      setState(() {
+        _all = rows;
+        _isGuard = isGuard;
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = true;
+      });
+    }
+  }
+
+  List<GateEntry> get _filtered {
     final q = _search.text.trim().toLowerCase();
     if (q.isEmpty) return _all;
     return _all.where((g) => g.searchText.contains(q)).toList();
   }
 
-  /// Tapping the button of the decision already set clears it back to
-  /// pending, so a mis-tap can be undone without leaving the screen.
-  void _setDecision(int i, GateLogDecision decision) {
+  /// Management only. Tapping the decision already set clears it back to
+  /// pending, so a mis-tap can be undone.
+  ///
+  /// Local-only for now — there is no update endpoint wired here yet.
+  void _setDecision(GateEntry entry, GateDecision decision) {
+    final i = _all.indexOf(entry);
+    if (i < 0) return;
     setState(() {
-      final next = _all[i].decision == decision
-          ? GateLogDecision.pending
-          : decision;
+      final next = _all[i].decision == decision ? GateDecision.pending : decision;
       _all[i] = _all[i].copyWith(decision: next);
     });
   }
+
+  // ==========================================================================
+  //  UI
+  // ==========================================================================
 
   @override
   Widget build(BuildContext context) {
@@ -67,7 +119,7 @@ class _GateLogScreenState extends State<GateLogScreen> {
         child: CenteredFill(
           child: Column(
             children: [
-              // Search + subtitle.
+              // ---- Search + subtitle ----
               Padding(
                 padding: EdgeInsets.fromLTRB(
                   gutter,
@@ -85,7 +137,9 @@ class _GateLogScreenState extends State<GateLogScreen> {
                     ),
                     const SizedBox(height: AppSpacing.sm),
                     Text(
-                      'Guests invited by guard · approve or reject',
+                      _isGuard
+                          ? 'Guests invited by guard · entry status'
+                          : 'Guests invited by guard · approve or reject',
                       style: t.bodySmall?.copyWith(
                         color: AppColors.muted,
                         fontWeight: FontWeight.w600,
@@ -95,118 +149,179 @@ class _GateLogScreenState extends State<GateLogScreen> {
                 ),
               ),
 
-              // List.
-              Expanded(
-                child: rows.isEmpty
-                    ? const _Empty()
-                    : ListView.separated(
-                        physics: const BouncingScrollPhysics(
-                          parent: AlwaysScrollableScrollPhysics(),
-                        ),
-                        padding: EdgeInsets.fromLTRB(
-                          gutter,
-                          AppSpacing.sm,
-                          gutter,
-                          AppSpacing.xxl,
-                        ),
-                        itemCount: rows.length,
-                        separatorBuilder: (_, __) =>
-                            const SizedBox(height: AppSpacing.md),
-                        itemBuilder: (context, i) {
-                          final g = rows[i];
-                          final realIdx = _all.indexOf(g);
-                          return _GateLogCard(
-                            entry: g,
-                            onApprove: () => _setDecision(
-                              realIdx,
-                              GateLogDecision.approved,
-                            ),
-                            onReject: () => _setDecision(
-                              realIdx,
-                              GateLogDecision.rejected,
-                            ),
-                          );
-                        },
-                      ),
-              ),
+              // ---- List ----
+              Expanded(child: _body(rows, gutter)),
             ],
           ),
         ),
       ),
     );
   }
+
+  Widget _body(List<GateEntry> rows, double gutter) {
+    if (_loading) {
+      return const Center(
+        child: CircularProgressIndicator(color: AppColors.brand),
+      );
+    }
+    if (_error) {
+      return _ListMessage(
+        icon: Icons.wifi_off_rounded,
+        message: "Couldn't load the gate log.",
+        onRetry: _load,
+      );
+    }
+    if (rows.isEmpty) {
+      return _ListMessage(
+        icon: Icons.shield_outlined,
+        message: _search.text.trim().isEmpty
+            ? 'No Data'
+            : 'No guests match "${_search.text.trim()}"',
+      );
+    }
+    return ListView.separated(
+      physics: const BouncingScrollPhysics(
+        parent: AlwaysScrollableScrollPhysics(),
+      ),
+      padding: EdgeInsets.fromLTRB(
+        gutter,
+        AppSpacing.sm,
+        gutter,
+        AppSpacing.xxl,
+      ),
+      itemCount: rows.length,
+      separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.md),
+      itemBuilder: (context, i) {
+        final g = rows[i];
+        return _GateLogCard(
+          entry: g,
+          isGuard: _isGuard,
+          onApprove: () => _setDecision(g, GateDecision.approved),
+          onReject: () => _setDecision(g, GateDecision.rejected),
+        );
+      },
+    );
+  }
 }
+
+// ============================================================================
+//  CARD
+// ============================================================================
 
 class _GateLogCard extends StatelessWidget {
   const _GateLogCard({
     required this.entry,
+    required this.isGuard,
     required this.onApprove,
     required this.onReject,
   });
 
-  final GateLogEntry entry;
+  final GateEntry entry;
+
+  /// Guard -> read-only chip. Management -> Approve / Reject buttons.
+  final bool isGuard;
   final VoidCallback onApprove;
   final VoidCallback onReject;
 
   @override
   Widget build(BuildContext context) {
-    final hasNote = entry.note.isNotEmpty;
+    final name = entry.plus > 0
+        ? '${entry.primaryName}  +${entry.plus}'
+        : entry.primaryName;
 
     return AppCard(
       padding: const EdgeInsets.all(AppSpacing.lg),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // ---- Detail rows ----
+          _LogRow(label: 'Guest Name :', value: name),
+          const _RowDivider(),
+          _LogRow(label: 'Date :', value: entry.dateTime),
+          const _RowDivider(),
           _LogRow(
-            label: 'Guest Name :',
-            value: entry.plus > 0 ? '${entry.name}  +${entry.plus}' : entry.name,
+            label: 'Duration :',
+            value: entry.validHours.isEmpty ? '—' : entry.validHours,
           ),
           const _RowDivider(),
-          _LogRow(label: 'Date / Time :', value: entry.when),
-          const _RowDivider(),
-          _LogRow(label: 'Duration :', value: entry.duration),
-          const _RowDivider(),
-          _LogRow(label: 'RequestedBy :', value: entry.meetWith),
-
-          // Saved note — same "Label : value" alignment as the rows above.
-          if (hasNote) ...[
+          _LogRow(
+            label: 'RequestedBy :',
+            value: entry.userName.isEmpty ? '—' : entry.userName,
+          ),
+          if (entry.note.isNotEmpty) ...[
             const _RowDivider(),
             _LogRow(label: 'Note :', value: entry.note),
           ],
 
           const SizedBox(height: AppSpacing.md),
 
-          // Approve / Reject — equal halves so neither dominates the card.
-          Row(
-            children: [
-              Expanded(
-                child: _DecisionButton(
-                  label: entry.approved ? 'Approved' : 'Approve',
-                  color: AppColors.success,
-                  active: entry.approved,
-                  onTap: onApprove,
+          // ---- Footer: chip (guard) OR the two buttons (management) ----
+          if (isGuard)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: _StatusChip(decision: entry.decision),
+            )
+          else
+            Row(
+              children: [
+                Expanded(
+                  child: _DecisionButton(
+                    label: entry.decision == GateDecision.approved
+                        ? 'Approved'
+                        : 'Approve',
+                    color: AppColors.success,
+                    active: entry.decision == GateDecision.approved,
+                    onTap: onApprove,
+                  ),
                 ),
-              ),
-              const SizedBox(width: AppSpacing.md),
-              Expanded(
-                child: _DecisionButton(
-                  label: entry.rejected ? 'Rejected' : 'Reject',
-                  color: AppColors.danger,
-                  active: entry.rejected,
-                  onTap: onReject,
+                const SizedBox(width: AppSpacing.md),
+                Expanded(
+                  child: _DecisionButton(
+                    label: entry.decision == GateDecision.rejected
+                        ? 'Rejected'
+                        : 'Reject',
+                    color: AppColors.danger,
+                    active: entry.decision == GateDecision.rejected,
+                    onTap: onReject,
+                  ),
                 ),
-              ),
-            ],
-          ),
+              ],
+            ),
         ],
       ),
     );
   }
 }
 
-/// One half of the Approve / Reject pair. Filled in its own colour once
-/// chosen, otherwise a soft outlined pill — same convention as the guard
-/// flow buttons on the Expected Guests card.
+/// Read-only `sAppRejStatus` pill — the guard's view of the decision.
+class _StatusChip extends StatelessWidget {
+  const _StatusChip({required this.decision});
+
+  final GateDecision decision;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+      decoration: BoxDecoration(
+        color: decision.background,
+        borderRadius: BorderRadius.circular(AppRadii.pill),
+      ),
+      child: Text(
+        decision.label,
+        style: Theme.of(context).textTheme.titleSmall?.copyWith(
+          fontSize: 13,
+          color: decision.foreground,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 0,
+        ),
+      ),
+    );
+  }
+}
+
+/// One half of the management Approve / Reject pair. Filled in its own colour
+/// once chosen, otherwise a soft outlined pill.
 class _DecisionButton extends StatelessWidget {
   const _DecisionButton({
     required this.label,
@@ -255,6 +370,10 @@ class _DecisionButton extends StatelessWidget {
   }
 }
 
+// ============================================================================
+//  SMALL PIECES
+// ============================================================================
+
 /// A "Label : value" row inside a card.
 class _LogRow extends StatelessWidget {
   const _LogRow({required this.label, required this.value});
@@ -301,29 +420,42 @@ class _RowDivider extends StatelessWidget {
       const Divider(height: 1, color: AppColors.borderSoft);
 }
 
-class _Empty extends StatelessWidget {
-  const _Empty();
+/// Full-height centred message for the empty / error states.
+class _ListMessage extends StatelessWidget {
+  const _ListMessage({
+    required this.icon,
+    required this.message,
+    this.onRetry,
+  });
+
+  final IconData icon;
+  final String message;
+  final VoidCallback? onRetry;
 
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context).textTheme;
+
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.xxxl),
+        padding: const EdgeInsets.all(AppSpacing.xxl),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(
-              Icons.shield_outlined,
-              size: 44,
-              color: AppColors.faint,
-            ),
+            Icon(icon, size: 44, color: AppColors.faint),
             const SizedBox(height: AppSpacing.md),
-            Text(
-              'No guard guests yet',
-              style: t.bodyMedium,
-              textAlign: TextAlign.center,
-            ),
+            Text(message, textAlign: TextAlign.center, style: t.bodyMedium),
+            if (onRetry != null) ...[
+              const SizedBox(height: AppSpacing.lg),
+              TextButton(
+                onPressed: onRetry,
+                style: TextButton.styleFrom(
+                  foregroundColor: AppColors.brand,
+                  textStyle: t.titleSmall,
+                ),
+                child: const Text('Retry'),
+              ),
+            ],
           ],
         ),
       ),

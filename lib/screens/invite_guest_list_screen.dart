@@ -3,14 +3,14 @@ import 'package:intl/intl.dart';
 
 import '../models/guard_visitor.dart';
 import '../models/guest_entry.dart';
-import '../services/VmsVisitorDetailsByManagement.dart';
+import '../services/VisitorListRepo.dart';
 import '../theme/tokens.dart';
 import '../widgets/app_card.dart';
 import '../widgets/app_scaffold.dart';
 import '../widgets/pill_search_field.dart';
 
 /// "Invite guest list" (management side) — the visits the logged-in manager
-/// raised, from [VmsVisitorDetailsByManagementRepo].
+/// raised, via [VisitorListRepo].
 ///
 /// The dashboard routes here when `iUserType != "1"`; guards get
 /// [ExpectedGuestScreen] instead.
@@ -49,10 +49,14 @@ class _InviteGuestListScreenState extends State<InviteGuestListScreen> {
       _error = false;
     });
     try {
-      // Dates default to today inside the repo; iUserId comes from the
-      // SharedPreferences value saved at login.
-      final list = await VmsVisitorDetailsByManagementRepo()
-          .getVisitorDetails(context);
+      // Routed here only for managers, but go through the dispatcher anyway
+      // so every list screen resolves its endpoint the same way.
+      final range = VisitorListRepo.today;
+      final list = await VisitorListRepo().getVisitorList(
+        context,
+        fromDate: range.start,
+        toDate: range.end,
+      );
       if (!mounted) return;
       setState(() {
         _all = list;

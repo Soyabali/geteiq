@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../models/guard_visitor.dart';
-import '../services/VMSGaurdVisitorRequestListMonth.dart';
+import '../services/VisitorListRepo.dart';
 import '../theme/tokens.dart';
 import '../widgets/app_card.dart';
 import '../widgets/app_scaffold.dart';
@@ -11,7 +11,8 @@ import '../widgets/pill_search_field.dart';
 /// "Month guest list" — every guard visitor request from the current month.
 ///
 /// Read-only history, same layout as [YesterdayGuestListScreen]: no approve
-/// action and no note field. Data comes from [GuardVisitorMonthRepo].
+/// action and no note field. Data comes from [VisitorListRepo], which picks
+/// the guard or management endpoint by the logged-in `iUserType`.
 class MonthGuestListScreen extends StatefulWidget {
   const MonthGuestListScreen({super.key});
 
@@ -56,7 +57,8 @@ class _MonthGuestListScreenState extends State<MonthGuestListScreen> {
       _error = false;
     });
     try {
-      final list = await GuardVisitorMonthRepo().getVisitorList(
+      // Guard -> guard endpoint, manager -> management endpoint. Same rows.
+      final list = await VisitorListRepo().getVisitorList(
         context,
         fromDate: _fromDate,
         toDate: _toDate,

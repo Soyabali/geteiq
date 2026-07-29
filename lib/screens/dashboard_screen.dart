@@ -22,6 +22,7 @@ import 'yesterday_guest_list_screen.dart';
 /// Screen 4 — home. Sponsored slot, four entry points, and the primary
 /// "Add Guest" action that starts the invite flow.
 ///
+
 class DashboardScreen extends StatelessWidget {
   const DashboardScreen({super.key});
 
