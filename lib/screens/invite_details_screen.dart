@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/invite.dart';
 import '../services/VmsManagementPreApprovalVisitor.dart';
@@ -7,6 +8,7 @@ import '../theme/tokens.dart';
 import '../widgets/app_button.dart';
 import '../widgets/app_card.dart';
 import '../widgets/app_scaffold.dart';
+import 'dashboard_screen.dart';
 import 'ticket_screen.dart';
 
 /// Screen 7 — review the window, add a note, tidy the guest list, create.
@@ -97,16 +99,30 @@ class _InviteDetailsScreenState extends State<InviteDetailsScreen> {
           ..hideCurrentSnackBar()
           ..showSnackBar(SnackBar(content: Text(msg)));
 
-        // ...and carry the QRCode url + MyQRCode to the ticket screen.
-        Navigator.of(context).push(
-          MaterialPageRoute<void>(
-            builder: (_) => TicketScreen(
-              invite: widget.invite,
-              qrCodeUrl: qrCode,
-              myQrCode: myQrCode,
+        // Guard (iUserType == "1") -> done, drop straight back to the
+        // dashboard (no QR/ticket screen for this role).
+        // Management (iUserType == "2") -> unchanged: show the QR ticket.
+        final prefs = await SharedPreferences.getInstance();
+        final isGuard = (prefs.getString('iUserType') ?? '').trim() == "1";
+        if (!mounted) return;
+
+        if (isGuard) {
+          Navigator.of(context).pushAndRemoveUntil(
+            MaterialPageRoute<void>(builder: (_) => const DashboardScreen()),
+            (route) => false,
+          );
+        } else {
+          // ...and carry the QRCode url + MyQRCode to the ticket screen.
+          Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (_) => TicketScreen(
+                invite: widget.invite,
+                qrCodeUrl: qrCode,
+                myQrCode: myQrCode,
+              ),
             ),
-          ),
-        );
+          );
+        }
       } else {
         // FAILED -> just show the api message.
         ScaffoldMessenger.of(context)

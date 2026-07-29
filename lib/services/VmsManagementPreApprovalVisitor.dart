@@ -32,7 +32,7 @@ class PreApprovalVisitorRepo {
       final iValidHours = invite.validForHours.toString();
 
       // GuestList -> a JSON string with QUOTED keys AND values, e.g.:
-      // '[{"sGuestName":"Jitender","sContactNo":"9810754385"},{...}]'
+      // '[{"sGuestName":"Jitender","sContactNo":"9810754385","iUserId":10},{...}]'
       //
       // Build a real List<Map> first, then json.encode() it. json.encode adds
       // the double-quotes correctly, so the server can parse it.
@@ -42,7 +42,14 @@ class PreApprovalVisitorRepo {
         final contactNo = digits.length > 10
             ? digits.substring(digits.length - 10)
             : digits;
-        return {"sGuestName": g.name, "sContactNo": contactNo};
+        return {
+          "sGuestName": g.name,
+          "sContactNo": contactNo,
+          // Guard flow only: iUserId picked from the guest's own Department
+          // dropdown (see guard_add_manually_screen.dart). Management guests
+          // don't set this, so it falls back to 0.
+          "iUserId": g.departmentId ?? 0,
+        };
       }).toList();
       final guestList = json.encode(guestMaps); // -> proper JSON string
 

@@ -24,6 +24,8 @@ void main() {
     await tester.tap(find.text('Add Guest'));
     await tester.pumpAndSettle();
 
+    var kLoggedInRole;
+
     if (kLoggedInRole == UserRole.guard) {
       // Guard → full-screen "Invite Setup" (GuardInviteScreen).
       expect(find.text('Invite Setup'), findsOneWidget);

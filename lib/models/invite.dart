@@ -4,13 +4,23 @@ import 'package:flutter/foundation.dart';
 /// A person being invited through the gate.
 @immutable
 class Guest {
-  const Guest({required this.name, required this.phone, this.department});
+  const Guest({
+    required this.name,
+    required this.phone,
+    this.department,
+    this.departmentId,
+  });
 
   final String name;
   final String phone;
 
-  /// Optional department (used by the guard "Add Manually" flow).
+  /// Department label (used by the guard "Add Manually" flow). Comes from
+  /// the VMSUsers API's `sUserName`.
   final String? department;
+
+  /// The matching VMSUsers `iUserId` for [department] — carried alongside the
+  /// name so it's available when this guest is later sent to the add-guest API.
+  final int? departmentId;
 
   /// Initials for the avatar circle, e.g. "Ravi Yadav" -> "RY".
   String get initials {
@@ -24,10 +34,16 @@ class Guest {
     return (parts.first[0] + parts.last[0]).toUpperCase();
   }
 
-  Guest copyWith({String? name, String? phone, String? department}) => Guest(
+  Guest copyWith({
+    String? name,
+    String? phone,
+    String? department,
+    int? departmentId,
+  }) => Guest(
     name: name ?? this.name,
     phone: phone ?? this.phone,
     department: department ?? this.department,
+    departmentId: departmentId ?? this.departmentId,
   );
 
   @override

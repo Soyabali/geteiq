@@ -539,7 +539,7 @@ class _GuestCard extends StatelessWidget {
                           ? '—'
                           : guest.requestedBy,
                     ),
-                    _MetaLine(label: 'Date, Time:', value: guest.when),
+                    _MetaLine(label: 'Date / Time:', value: guest.when),
                     _MetaLine(
                       label: 'Meeting duration:',
                       value: guest.duration,

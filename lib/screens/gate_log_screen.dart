@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/gate_entry.dart';
 import '../services/GateEntryRepo.dart';
+import '../services/VMSVisitorAppStatus.dart';
 import '../theme/tokens.dart';
 import '../widgets/app_card.dart';
 import '../widgets/app_scaffold.dart';
@@ -80,17 +81,46 @@ class _GateLogScreenState extends State<GateLogScreen> {
     return _all.where((g) => g.searchText.contains(q)).toList();
   }
 
-  /// Management only. Tapping the decision already set clears it back to
-  /// pending, so a mis-tap can be undone.
+  /// Management only. Approve / Reject -> VMSVisitorAppStatus API.
   ///
-  /// Local-only for now — there is no update endpoint wired here yet.
-  void _setDecision(GateEntry entry, GateDecision decision) {
+  /// Sends the tapped entry's `sQRCodeVal` plus `iStatus` (Approved -> "1",
+  /// Rejected -> "2"), then toasts whatever "Msg" the API replied with. The
+  /// card only flips to the new decision once the API confirms it
+  /// ("Result" == "1") — a failed call leaves the card as it was.
+  Future<void> _onDecision(GateEntry entry, GateDecision decision) async {
     final i = _all.indexOf(entry);
     if (i < 0) return;
-    setState(() {
-      final next = _all[i].decision == decision ? GateDecision.pending : decision;
-      _all[i] = _all[i].copyWith(decision: next);
-    });
+
+    final status = decision == GateDecision.approved
+        ? VisitorAppStatus.approved
+        : VisitorAppStatus.rejected;
+
+    try {
+      final map = await VmsVisitorAppStatusRepo().updateStatus(
+        context,
+        entry.qrCodeVal, // sQRCodeVal
+        status,
+      );
+      if (!mounted) return;
+
+      // Toast — just the API's own message, whatever it says.
+      final msg = '${map['Msg'] ?? ''}';
+      if (msg.isNotEmpty) {
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(SnackBar(content: Text(msg)));
+      }
+
+      // "Result": "1" -> accepted, update the card. Anything else -> leave it.
+      if ("${map['Result']}" == "1") {
+        setState(() => _all[i] = _all[i].copyWith(decision: decision));
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(const SnackBar(content: Text('Something went wrong')));
+    }
   }
 
   // ==========================================================================
@@ -196,8 +226,8 @@ class _GateLogScreenState extends State<GateLogScreen> {
         return _GateLogCard(
           entry: g,
           isGuard: _isGuard,
-          onApprove: () => _setDecision(g, GateDecision.approved),
-          onReject: () => _setDecision(g, GateDecision.rejected),
+          onApprove: () => _onDecision(g, GateDecision.approved),
+          onReject: () => _onDecision(g, GateDecision.rejected),
         );
       },
     );

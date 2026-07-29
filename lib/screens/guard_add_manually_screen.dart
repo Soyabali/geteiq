@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../models/invite.dart';
+import '../models/vms_user.dart';
+import '../services/VMSUsers.dart';
 import '../theme/tokens.dart';
 import '../widgets/app_button.dart';
 import '../widgets/app_card.dart';
@@ -27,12 +29,43 @@ class _GuardAddManuallyScreenState extends State<GuardAddManuallyScreen> {
   final _phone = TextEditingController();
   final _formKey = GlobalKey<FormState>();
 
-  // Department options for the dropdown.
-  static const _departments = ['HR', 'Sales', 'IT Dept', 'Mgmt', 'Owner', 'CO'];
-  String? _department;
+  // Department dropdown — options now come from the VMSUsers API instead of
+  // a static list. Each option carries BOTH `iUserId` and `sUserName`
+  // together (see VmsUser), since the next API call needs the id, not just
+  // the label.
+  final _usersRepo = VmsUsersRepo();
+  List<VmsUser> _departments = [];
+  bool _loadingDepartments = true;
+  VmsUser? _selectedUser;
 
   // Guests added so far (starts from anything already on the invite).
   late final List<Guest> _selected = List.of(widget.invite.guests);
+
+  @override
+  void initState() {
+    super.initState();
+    _loadDepartments();
+  }
+
+  // Loads the Department dropdown once when the screen opens.
+  Future<void> _loadDepartments() async {
+    try {
+      final users = await _usersRepo.getUsers(context);
+      if (!mounted) return;
+      setState(() {
+        _departments = users;
+        _loadingDepartments = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _loadingDepartments = false);
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          const SnackBar(content: Text('Could not load departments')),
+        );
+    }
+  }
 
   @override
   void dispose() {
@@ -47,13 +80,14 @@ class _GuardAddManuallyScreenState extends State<GuardAddManuallyScreen> {
     final guest = Guest(
       name: _name.text.trim(),
       phone: '+91 ${_phone.text.trim()}',
-      department: _department, // captured from the dropdown
+      department: _selectedUser?.userName, // sUserName — shown on the guest card
+      departmentId: _selectedUser?.userId, // iUserId — needed by the next API call
     );
 
     setState(() => _selected.add(guest));
     _name.clear();
     _phone.clear();
-    setState(() => _department = null);
+    setState(() => _selectedUser = null);
     FocusScope.of(context).unfocus();
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
@@ -131,32 +165,63 @@ class _GuardAddManuallyScreenState extends State<GuardAddManuallyScreen> {
                     ),
                     const SizedBox(height: AppSpacing.lg),
                     // Department dropdown — above the "Add Guest" button.
-                    DropdownButtonFormField<String>(
-                      initialValue: _department,
+                    // Backed by the VMSUsers API; `sUserName` values can run
+                    // long (e.g. "Sakshi Begmal (Business Development (BD) )"),
+                    // so both the closed field and each menu row are capped to
+                    // one line with an ellipsis instead of overflowing.
+                    DropdownButtonFormField<VmsUser>(
+                      initialValue: _selectedUser,
                       isExpanded: true,
                       // Left/right padding so the selected value lines up with
                       // the text fields above (matches the input theme).
                       padding: EdgeInsets.zero,
                       alignment: AlignmentDirectional.centerStart,
-                      decoration: const InputDecoration(
+                      decoration: InputDecoration(
                         labelText: 'Department',
-                        contentPadding: EdgeInsets.symmetric(
+                        contentPadding: const EdgeInsets.symmetric(
                           horizontal: AppSpacing.lg,
                           vertical: AppSpacing.lg,
                         ),
+                        hintText: _loadingDepartments
+                            ? 'Loading departments...'
+                            : null,
                       ),
                       icon: const Icon(Icons.keyboard_arrow_down_rounded),
-                      items: _departments
+                      // What shows in the CLOSED field once a value is picked.
+                      selectedItemBuilder: (context) => _departments
                           .map(
-                            (d) => DropdownMenuItem<String>(
-                              value: d,
-                              child: Text(d),
+                            (u) => Text(
+                              u.userName,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
                           )
                           .toList(),
-                      onChanged: (v) => setState(() => _department = v),
+                      // What shows in the OPEN menu list.
+                      items: _departments
+                          .map(
+                            (u) => DropdownMenuItem<VmsUser>(
+                              value: u,
+                              child: Text(
+                                u.userName,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: _loadingDepartments
+                          ? null
+                          : (u) {
+                              setState(() => _selectedUser = u);
+                              // Both values together — this is what the next
+                              // API call (adding the guest) needs to send.
+                              print(
+                                'Department selected -> iUserId: ${u?.userId}, sUserName: ${u?.userName}',
+                              );
+                            },
                       validator: (v) =>
-                          (v == null || v.isEmpty) ? 'Select a department' : null,
+                          v == null ? 'Select a department' : null,
                     ),
                     const SizedBox(height: AppSpacing.xxl),
                     PrimaryButton(label: 'Add Guest', onPressed: _addGuest),
