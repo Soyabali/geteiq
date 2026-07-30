@@ -87,13 +87,14 @@ class _YesterdayGuestListScreenState extends State<YesterdayGuestListScreen> {
       appBar: AppBar(
         titleSpacing: gutter,
         leadingWidth: gutter + 32,
+        centerTitle: true,
         leading: Navigator.of(context).canPop()
             ? IconButton(
                 icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
                 onPressed: () => Navigator.of(context).maybePop(),
               )
             : null,
-        title: const Text('Yesterday guest list'),
+        title: const Text('Yesterday Guest List'),
       ),
       body: SafeArea(
         bottom: false,

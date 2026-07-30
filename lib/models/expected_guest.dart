@@ -24,6 +24,7 @@ class ExpectedGuest {
     this.duration = '—',
     this.note = '—',
     this.approval = 'APPROVED',
+    this.statusText = '—',
   });
 
   /// sQRCodeVal from the list API — the id the status-update API needs.
@@ -37,20 +38,23 @@ class ExpectedGuest {
   final String note;
   final String approval; // badge text
   final GuestStage stage;
+  final String statusText; // sStatus — raw status text from the API
 
   /// Returns a copy with a new stage (used when the guard taps an action).
-  ExpectedGuest copyWith({GuestStage? stage}) => ExpectedGuest(
-    qrCodeVal: qrCodeVal,
-    name: name,
-    plus: plus,
-    requestedBy: requestedBy,
-    phone: phone,
-    when: when,
-    duration: duration,
-    note: note,
-    approval: approval,
-    stage: stage ?? this.stage,
-  );
+  ExpectedGuest copyWith({GuestStage? stage, String? statusText}) =>
+      ExpectedGuest(
+        qrCodeVal: qrCodeVal,
+        name: name,
+        plus: plus,
+        requestedBy: requestedBy,
+        phone: phone,
+        when: when,
+        duration: duration,
+        note: note,
+        approval: approval,
+        stage: stage ?? this.stage,
+        statusText: statusText ?? this.statusText,
+      );
 
   String get searchText =>
       '$name $requestedBy $phone $note'.toLowerCase();

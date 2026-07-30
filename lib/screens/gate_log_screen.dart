@@ -137,6 +137,7 @@ class _GateLogScreenState extends State<GateLogScreen> {
       appBar: AppBar(
         titleSpacing: gutter,
         leadingWidth: gutter + 32,
+        centerTitle: true,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
           onPressed: () => Navigator.of(context).maybePop(),
@@ -261,7 +262,7 @@ class _GateLogCard extends StatelessWidget {
           ),
           const _RowDivider(),
           _LogRow(
-            label: 'RequestedBy',
+            label: 'Req .By',
             value: entry.userName.isEmpty ? '—' : entry.userName,
           ),
           if (entry.note.isNotEmpty) ...[
@@ -402,7 +403,7 @@ class _LogRow extends StatelessWidget {
   final String value;
 
   /// Width of the label column — sized for the longest label on this card
-  /// ("RequestedBy"), which is what fixes the colon's x position.
+  /// ("Duration"), which is what fixes the colon's x position.
   static const double _labelWidth = 96;
 
   @override

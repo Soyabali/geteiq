@@ -155,13 +155,14 @@ class _MonthGuestListScreenState extends State<MonthGuestListScreen> {
       appBar: AppBar(
         titleSpacing: gutter,
         leadingWidth: gutter + 32,
+        centerTitle: true,
         leading: Navigator.of(context).canPop()
             ? IconButton(
                 icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
                 onPressed: () => Navigator.of(context).maybePop(),
               )
             : null,
-        title: const Text('Month guest list'),
+        title: const Text('Month Guest List'),
       ),
       body: SafeArea(
         bottom: false,

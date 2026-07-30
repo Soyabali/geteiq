@@ -84,6 +84,7 @@ class _ExpectedGuestScreenState extends State<ExpectedGuestScreen> {
       duration: v.validHours.isEmpty ? '—' : v.validHours, // iValidHours
       note: v.note.isEmpty ? '—' : v.note, // sNote
       stage: _stageFromStatus(v.status), // sStatus -> stage
+      statusText: v.status.isEmpty ? '—' : v.status, // sStatus -> shown as-is
     );
   }
 
@@ -168,7 +169,14 @@ class _ExpectedGuestScreenState extends State<ExpectedGuestScreen> {
         // sees the change without a full reload.
         if (stage != null) {
           final i = _all.indexOf(guest);
-          if (i >= 0) setState(() => _all[i] = guest.copyWith(stage: stage));
+          if (i >= 0) {
+            setState(
+              () => _all[i] = guest.copyWith(
+                stage: stage,
+                statusText: status.label,
+              ),
+            );
+          }
         }
         _toast(msg.isEmpty ? '${status.label} updated' : msg, ok: true);
       } else {
@@ -239,6 +247,7 @@ class _ExpectedGuestScreenState extends State<ExpectedGuestScreen> {
       appBar: AppBar(
         titleSpacing: gutter,
         leadingWidth: gutter + 32,
+        centerTitle: true,
         leading: Navigator.of(context).canPop()
             ? IconButton(
                 icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
@@ -536,14 +545,7 @@ class _GuestCard extends StatelessWidget {
                       value: guest.duration,
                     ),
                     _MetaLine(label: 'Note:', value: guest.note),
-                    const SizedBox(height: AppSpacing.xs),
-                    Text(
-                      'Status: ${guest.stage.label}',
-                      style: t.bodySmall?.copyWith(
-                        color: AppColors.faint,
-                        fontSize: 11,
-                      ),
-                    ),
+                    _MetaLine(label: 'Status:', value: guest.statusText),
                   ],
                 ),
               ),

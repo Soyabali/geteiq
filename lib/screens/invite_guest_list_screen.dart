@@ -90,13 +90,14 @@ class _InviteGuestListScreenState extends State<InviteGuestListScreen> {
       appBar: AppBar(
         titleSpacing: gutter,
         leadingWidth: gutter + 32,
+        centerTitle: true,
         leading: Navigator.of(context).canPop()
             ? IconButton(
                 icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
                 onPressed: () => Navigator.of(context).maybePop(),
               )
             : null,
-        title: const Text('Invite guest list'),
+        title: const Text('Invite Guest List'),
       ),
       body: SafeArea(
         bottom: false,

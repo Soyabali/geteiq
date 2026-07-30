@@ -112,6 +112,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
         elevation: 0,
         scrolledUnderElevation: 0.5,
         titleSpacing: 0,
+        centerTitle: true,
         // iOS-style back chevron.
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),

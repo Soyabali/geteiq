@@ -244,6 +244,7 @@ class _ScanVisitorScreenState extends State<ScanVisitorScreen> {
         backgroundColor: Colors.black,
         foregroundColor: Colors.white,
         surfaceTintColor: Colors.transparent,
+        centerTitle: true,
         iconTheme: const IconThemeData(color: Colors.white),
         actionsIconTheme: const IconThemeData(color: Colors.white),
         // Clear close button to exit the camera.
