@@ -84,8 +84,6 @@ class _ExpectedGuestScreenState extends State<ExpectedGuestScreen> {
       duration: v.validHours.isEmpty ? '—' : v.validHours, // iValidHours
       note: v.note.isEmpty ? '—' : v.note, // sNote
       stage: _stageFromStatus(v.status), // sStatus -> stage
-      // approval: API has no approval field -> keeps default 'APPROVED'.
-      // TODO: change to a real approval value when the API provides one.
     );
   }
 
@@ -312,11 +310,6 @@ class _ExpectedGuestScreenState extends State<ExpectedGuestScreen> {
                                 final g = rows[i];
                                 return _GuestCard(
                                   guest: g,
-                                  // Approved badge -> iStatus 1 (no stage move)
-                                  onApprove: () => _updateStatus(
-                                    g,
-                                    GuardStatus.approved,
-                                  ),
                                   // Not arrived -> 4, Check-in -> 2,
                                   // Check-out -> 3
                                   onNotArrived: () => _updateStatus(
@@ -470,14 +463,12 @@ class _StatBox extends StatelessWidget {
 class _GuestCard extends StatelessWidget {
   const _GuestCard({
     required this.guest,
-    required this.onApprove,
     required this.onNotArrived,
     required this.onCheckIn,
     required this.onCheckOut,
   });
 
   final ExpectedGuest guest;
-  final VoidCallback onApprove; // iStatus 1
   final VoidCallback onNotArrived; // iStatus 4
   final VoidCallback onCheckIn; // iStatus 2
   final VoidCallback onCheckOut; // iStatus 3
@@ -557,16 +548,8 @@ class _GuestCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: AppSpacing.sm),
-              // Right lane — badge + scan icon, 5dp off the card edge.
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _ApprovedBadge(label: guest.approval, onTap: onApprove),
-                  const SizedBox(height: AppSpacing.sm),
-                  const _ScanIconButton(),
-                ],
-              ),
+              // Right lane — scan icon, 5dp off the card edge.
+              const _ScanIconButton(),
             ],
           ),
         ),
@@ -636,38 +619,6 @@ class _MetaLine extends StatelessWidget {
         ),
         maxLines: 2,
         overflow: TextOverflow.ellipsis,
-      ),
-    );
-  }
-}
-
-/// Green "APPROVED" pill. Tapping it pushes iStatus = 1 to the backend.
-class _ApprovedBadge extends StatelessWidget {
-  const _ApprovedBadge({required this.label, required this.onTap});
-
-  final String label;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: AppColors.success.withValues(alpha: 0.12),
-      borderRadius: BorderRadius.circular(AppRadii.pill),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(AppRadii.pill),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-          child: Text(
-            label.toUpperCase(),
-            style: Theme.of(context).textTheme.labelSmall?.copyWith(
-              color: AppColors.success,
-              fontWeight: FontWeight.w700,
-              fontSize: 10.5,
-              letterSpacing: 0.4,
-            ),
-          ),
-        ),
       ),
     );
   }

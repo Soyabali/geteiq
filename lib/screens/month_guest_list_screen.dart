@@ -403,18 +403,26 @@ class _MonthGuestCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _LogRow(label: 'Guest Name :', value: _guestName),
+          // Labels are passed WITHOUT the ":" — _LogRow draws it in its own
+          // fixed column so every colon lines up vertically down the card.
+          _LogRow(label: 'Guest Name', value: _guestName),
           const _RowDivider(),
-          _LogRow(label: 'Date / Time :', value: _dateTime),
+          _LogRow(label: 'Date / Time', value: _dateTime),
           const _RowDivider(),
           _LogRow(
-            label: 'Duration :',
+            label: 'Duration',
             value: visitor.validHours.isEmpty ? '—' : visitor.validHours,
           ),
           const _RowDivider(),
           _LogRow(
-            label: 'RequestedBy :',
+            label: 'Req.By',
             value: visitor.userName.isEmpty ? '—' : visitor.userName,
+          ),
+          const _RowDivider(),
+          // sStatus straight from the API response (e.g. "Pending").
+          _LogRow(
+            label: 'Status',
+            value: visitor.status.isEmpty ? '—' : visitor.status,
           ),
         ],
       ),
@@ -423,27 +431,36 @@ class _MonthGuestCard extends StatelessWidget {
 }
 
 /// A "Label : value" row inside a card.
+///
+/// [label] is passed WITHOUT its colon. The label sits in a fixed-width box
+/// and the ":" is drawn as its own widget right after it, so the colons of
+/// every row land on the same vertical line no matter how long the label is.
 class _LogRow extends StatelessWidget {
   const _LogRow({required this.label, required this.value});
 
   final String label;
   final String value;
 
+  /// Width of the label column — sized for the longest label on this card
+  /// ("Date / Time"), which is what fixes the colon's x position.
+  static const double _labelWidth = 96;
+
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context).textTheme;
+    final labelStyle = t.bodyMedium?.copyWith(color: AppColors.muted);
+
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 7),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
-            width: 104,
-            child: Text(
-              label,
-              style: t.bodyMedium?.copyWith(color: AppColors.muted),
-            ),
+            width: _labelWidth,
+            child: Text(label, style: labelStyle),
           ),
+          // The shared colon column.
+          Text(':', style: labelStyle),
           const SizedBox(width: AppSpacing.sm),
           Expanded(
             child: Text(

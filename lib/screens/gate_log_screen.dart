@@ -129,7 +129,6 @@ class _GateLogScreenState extends State<GateLogScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final t = Theme.of(context).textTheme;
     final gutter = AppSpacing.gutter(context);
     final rows = _filtered;
 
@@ -149,7 +148,7 @@ class _GateLogScreenState extends State<GateLogScreen> {
         child: CenteredFill(
           child: Column(
             children: [
-              // ---- Search + subtitle ----
+              // ---- Search ----
               Padding(
                 padding: EdgeInsets.fromLTRB(
                   gutter,
@@ -157,25 +156,10 @@ class _GateLogScreenState extends State<GateLogScreen> {
                   gutter,
                   AppSpacing.sm,
                 ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    PillSearchField(
-                      controller: _search,
-                      hint: 'Search guard guests',
-                      onChanged: () => setState(() {}),
-                    ),
-                    const SizedBox(height: AppSpacing.sm),
-                    Text(
-                      _isGuard
-                          ? 'Guests invited by guard · entry status'
-                          : 'Guests invited by guard · approve or reject',
-                      style: t.bodySmall?.copyWith(
-                        color: AppColors.muted,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
+                child: PillSearchField(
+                  controller: _search,
+                  hint: 'Search guard guests',
+                  onChanged: () => setState(() {}),
                 ),
               ),
 
@@ -265,22 +249,24 @@ class _GateLogCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // ---- Detail rows ----
-          _LogRow(label: 'Guest Name :', value: name),
+          // Labels are passed WITHOUT the ":" — _LogRow draws it in its own
+          // fixed column so every colon lines up vertically down the card.
+          _LogRow(label: 'Guest Name', value: name),
           const _RowDivider(),
-          _LogRow(label: 'Date :', value: entry.dateTime),
+          _LogRow(label: 'Date', value: entry.dateTime),
           const _RowDivider(),
           _LogRow(
-            label: 'Duration :',
+            label: 'Duration',
             value: entry.validHours.isEmpty ? '—' : entry.validHours,
           ),
           const _RowDivider(),
           _LogRow(
-            label: 'RequestedBy :',
+            label: 'RequestedBy',
             value: entry.userName.isEmpty ? '—' : entry.userName,
           ),
           if (entry.note.isNotEmpty) ...[
             const _RowDivider(),
-            _LogRow(label: 'Note :', value: entry.note),
+            _LogRow(label: 'Note', value: entry.note),
           ],
 
           const SizedBox(height: AppSpacing.md),
@@ -405,27 +391,36 @@ class _DecisionButton extends StatelessWidget {
 // ============================================================================
 
 /// A "Label : value" row inside a card.
+///
+/// [label] is passed WITHOUT its colon. The label sits in a fixed-width box
+/// and the ":" is drawn as its own widget right after it, so the colons of
+/// every row land on the same vertical line no matter how long the label is.
 class _LogRow extends StatelessWidget {
   const _LogRow({required this.label, required this.value});
 
   final String label;
   final String value;
 
+  /// Width of the label column — sized for the longest label on this card
+  /// ("RequestedBy"), which is what fixes the colon's x position.
+  static const double _labelWidth = 96;
+
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context).textTheme;
+    final labelStyle = t.bodyMedium?.copyWith(color: AppColors.muted);
+
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 7),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
-            width: 104,
-            child: Text(
-              label,
-              style: t.bodyMedium?.copyWith(color: AppColors.muted),
-            ),
+            width: _labelWidth,
+            child: Text(label, style: labelStyle),
           ),
+          // The shared colon column.
+          Text(':', style: labelStyle),
           const SizedBox(width: AppSpacing.sm),
           Expanded(
             child: Text(

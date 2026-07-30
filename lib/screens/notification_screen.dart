@@ -1,12 +1,16 @@
 import 'package:flutter/material.dart';
 
+import '../models/app_notification.dart';
+import '../services/NotificationList.dart';
 import '../theme/tokens.dart';
 
 /// Notifications screen — professional white layout, grouped by day, with a
 /// slow open transition (see [route]) and an iOS-style back button.
 ///
-/// Static data for now; swap [_today] / [_earlier] for an API call later.
-class NotificationScreen extends StatelessWidget {
+/// Rows come from `NotificationList/NotificationList` via
+/// [NotificationListRepo], which sends the login `iUserId`. Same load /
+/// error / empty pattern as `gate_log_screen.dart`.
+class NotificationScreen extends StatefulWidget {
   const NotificationScreen({super.key});
 
   /// A slow, smooth fade + gentle upward slide when opening this screen.
@@ -36,6 +40,67 @@ class NotificationScreen extends StatelessWidget {
   }
 
   @override
+  State<NotificationScreen> createState() => _NotificationScreenState();
+}
+
+class _NotificationScreenState extends State<NotificationScreen> {
+  List<AppNotification> _all = [];
+  bool _loading = true;
+  bool _error = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  // ==========================================================================
+  //  DATA
+  // ==========================================================================
+
+  /// [silent] keeps the current list on screen (pull-to-refresh) instead of
+  /// swapping it for the full-screen spinner.
+  Future<void> _load({bool silent = false}) async {
+    setState(() {
+      _loading = !silent;
+      _error = false;
+    });
+    try {
+      final rows = await NotificationListRepo().getNotifications(context);
+      if (!mounted) return;
+      setState(() {
+        _all = rows;
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = true;
+      });
+    }
+  }
+
+  /// Rows in the order the API sent them (newest first), split into
+  /// "Today" / "Yesterday" / date sections.
+  List<_Section> get _sections {
+    final sections = <_Section>[];
+    for (final n in _all) {
+      final label = n.dayLabel;
+      if (sections.isEmpty || sections.last.label != label) {
+        sections.add(_Section(label: label, items: [n]));
+      } else {
+        sections.last.items.add(n);
+      }
+    }
+    return sections;
+  }
+
+  // ==========================================================================
+  //  UI
+  // ==========================================================================
+
+  @override
   Widget build(BuildContext context) {
     final t = Theme.of(context).textTheme;
 
@@ -58,28 +123,68 @@ class NotificationScreen extends StatelessWidget {
           style: t.titleLarge?.copyWith(fontSize: 20),
         ),
         actions: [
-          TextButton(
-            onPressed: () {},
-            style: TextButton.styleFrom(foregroundColor: AppColors.brand),
-            child: const Text('Mark all read'),
+          IconButton(
+            icon: const Icon(Icons.refresh_rounded, size: 22),
+            color: AppColors.brand,
+            tooltip: 'Refresh',
+            onPressed: _loading ? null : _load,
           ),
           const SizedBox(width: AppSpacing.sm),
         ],
       ),
-      body: ListView(
+      body: _body(),
+    );
+  }
+
+  Widget _body() {
+    if (_loading) {
+      return const Center(
+        child: CircularProgressIndicator(color: AppColors.brand),
+      );
+    }
+    if (_error) {
+      return _ListMessage(
+        icon: Icons.wifi_off_rounded,
+        message: "Couldn't load your notifications.",
+        onRetry: _load,
+      );
+    }
+    if (_all.isEmpty) {
+      return const _ListMessage(
+        icon: Icons.notifications_none_rounded,
+        message: 'No Data',
+      );
+    }
+
+    final sections = _sections;
+    return RefreshIndicator(
+      color: AppColors.brand,
+      onRefresh: () => _load(silent: true),
+      child: ListView(
+        physics: const BouncingScrollPhysics(
+          parent: AlwaysScrollableScrollPhysics(),
+        ),
         padding: const EdgeInsets.only(bottom: AppSpacing.xxl),
         children: [
-          _SectionHeader(label: 'Today'),
-          ..._today.map((n) => _NotifTile(item: n)),
-          _SectionHeader(label: 'Earlier'),
-          ..._earlier.map((n) => _NotifTile(item: n)),
+          for (final s in sections) ...[
+            _SectionHeader(label: s.label),
+            ...s.items.map((n) => _NotifTile(item: n)),
+          ],
         ],
       ),
     );
   }
 }
 
-/// Small muted section label ("Today" / "Earlier").
+/// One day's worth of rows, in API order.
+class _Section {
+  _Section({required this.label, required this.items});
+
+  final String label;
+  final List<AppNotification> items;
+}
+
+/// Small muted section label ("Today" / "Yesterday" / "29 Jul 2026").
 class _SectionHeader extends StatelessWidget {
   const _SectionHeader({required this.label});
 
@@ -110,15 +215,14 @@ class _SectionHeader extends StatelessWidget {
 class _NotifTile extends StatelessWidget {
   const _NotifTile({required this.item});
 
-  final _Notif item;
+  final AppNotification item;
 
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context).textTheme;
 
     return Container(
-      // Unread rows get a very faint brand tint.
-      color: item.unread ? AppColors.brandTint.withValues(alpha: 0.35) : Colors.white,
+      color: Colors.white,
       padding: const EdgeInsets.symmetric(
         horizontal: AppSpacing.lg,
         vertical: AppSpacing.md,
@@ -126,7 +230,8 @@ class _NotifTile extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Type icon in a tinted circle.
+          // sImageUrl when the API sent one, otherwise the derived type icon
+          // in a tinted circle.
           Container(
             width: 42,
             height: 42,
@@ -135,18 +240,29 @@ class _NotifTile extends StatelessWidget {
               shape: BoxShape.circle,
             ),
             alignment: Alignment.center,
-            child: Icon(item.icon, color: item.color, size: 21),
+            clipBehavior: Clip.antiAlias,
+            child: item.hasImage
+                ? Image.network(
+                    item.imageUrl,
+                    width: 42,
+                    height: 42,
+                    fit: BoxFit.cover,
+                    // A dead image URL must not blank out the row.
+                    errorBuilder: (_, __, ___) =>
+                        Icon(item.icon, color: item.color, size: 21),
+                  )
+                : Icon(item.icon, color: item.color, size: 21),
           ),
           const SizedBox(width: AppSpacing.md),
 
-          // Title + message.
+          // sTitle + sNotification.
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  item.title,
+                  item.title.isEmpty ? 'Notification' : item.title,
                   style: t.titleSmall?.copyWith(
                     fontWeight: FontWeight.w700,
                     color: AppColors.ink,
@@ -165,25 +281,10 @@ class _NotifTile extends StatelessWidget {
           ),
           const SizedBox(width: AppSpacing.sm),
 
-          // Time + unread dot.
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                item.time,
-                style: t.labelSmall?.copyWith(color: AppColors.faint),
-              ),
-              const SizedBox(height: 6),
-              if (item.unread)
-                Container(
-                  width: 8,
-                  height: 8,
-                  decoration: const BoxDecoration(
-                    color: AppColors.brand,
-                    shape: BoxShape.circle,
-                  ),
-                ),
-            ],
+          // dReceivedAt — time of day, the day itself is in the section header.
+          Text(
+            item.timeLabel,
+            style: t.labelSmall?.copyWith(color: AppColors.faint),
           ),
         ],
       ),
@@ -191,71 +292,42 @@ class _NotifTile extends StatelessWidget {
   }
 }
 
-/// Static notification model.
-class _Notif {
-  const _Notif({
-    required this.icon,
-    required this.color,
-    required this.title,
-    required this.message,
-    required this.time,
-    this.unread = false,
-  });
+/// Full-height placeholder for the error / empty states.
+class _ListMessage extends StatelessWidget {
+  const _ListMessage({required this.icon, required this.message, this.onRetry});
 
   final IconData icon;
-  final Color color;
-  final String title;
   final String message;
-  final String time;
-  final bool unread;
+  final VoidCallback? onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.xxl),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 40, color: AppColors.faint),
+            const SizedBox(height: AppSpacing.md),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(color: AppColors.muted),
+            ),
+            if (onRetry != null) ...[
+              const SizedBox(height: AppSpacing.md),
+              TextButton(
+                onPressed: onRetry,
+                style: TextButton.styleFrom(foregroundColor: AppColors.brand),
+                child: const Text('Try again'),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
 }
-
-const _today = <_Notif>[
-  _Notif(
-    icon: Icons.check_circle_rounded,
-    color: AppColors.success,
-    title: 'Guest approved',
-    message: 'Ram Kumar has been approved for entry at Gate 1.',
-    time: '2m',
-    unread: true,
-  ),
-  _Notif(
-    icon: Icons.login_rounded,
-    color: Color(0xFF2563EB),
-    title: 'Checked in',
-    message: 'Priya Mehta checked in at the main gate.',
-    time: '18m',
-    unread: true,
-  ),
-  _Notif(
-    icon: Icons.qr_code_2_rounded,
-    color: AppColors.brand,
-    title: 'Invite created',
-    message: 'Your invite pass for Amit Verma is ready to share.',
-    time: '1h',
-  ),
-];
-
-const _earlier = <_Notif>[
-  _Notif(
-    icon: Icons.logout_rounded,
-    color: Color(0xFFEA580C),
-    title: 'Checked out',
-    message: 'Neha Gupta checked out at 9:30 AM.',
-    time: 'Yesterday',
-  ),
-  _Notif(
-    icon: Icons.warning_amber_rounded,
-    color: AppColors.danger,
-    title: 'Security alert',
-    message: 'An unrecognised visitor was flagged at Gate 2.',
-    time: 'Yesterday',
-  ),
-  _Notif(
-    icon: Icons.campaign_rounded,
-    color: Color(0xFF7C3AED),
-    title: 'Society notice',
-    message: 'Water supply maintenance scheduled for Sunday 8–10 AM.',
-    time: '2d',
-  ),
-];

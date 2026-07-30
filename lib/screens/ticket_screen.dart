@@ -221,8 +221,9 @@ class _TicketScreenState extends State<TicketScreen> {
           icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
           onPressed: () => Navigator.of(context).maybePop(),
         ),
+        centerTitle: true, // title sits in the middle of the app bar
         title: Text(
-          'Invite Pass',
+          'Visitor Pass',
           style: t.headlineSmall?.copyWith(color: AppColors.ticketInk),
         ),
         actions: [

@@ -161,6 +161,7 @@ class _InviteDetailsScreenState extends State<InviteDetailsScreen> {
             icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
             onPressed: () => Navigator.of(context).maybePop(),
           ),
+          centerTitle: true, // title sits in the middle of the app bar
           title: const Text('Invite Guests'),
         ),
         body: SafeArea(
@@ -213,9 +214,7 @@ class _InviteDetailsScreenState extends State<InviteDetailsScreen> {
                   minLines: 2,
                   maxLength: 120,
                   textCapitalization: TextCapitalization.sentences,
-                  decoration: const InputDecoration(
-                    hintText: 'Add a note for the guard or your guest',
-                  ),
+                  decoration: const InputDecoration(hintText: 'Add note'),
                 ),
                 const SizedBox(height: AppSpacing.lg),
 
