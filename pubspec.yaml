@@ -55,6 +55,7 @@ dependencies:
   # QR / barcode scanner (guard scans the visitor pass). Android + iOS.
   mobile_scanner: ^7.0.0
   connectivity_plus: ^7.3.1
+  flutter_launcher_icons: ^0.14.4
 
 dev_dependencies:
   flutter_test:
@@ -66,7 +67,6 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^5.0.0
-  flutter_launcher_icons: ^0.14.1
 
 flutter_icons:
   android: true

@@ -105,7 +105,7 @@ class NotificationService {
   }
 
   Future<void> _initLocalNotifications() async {
-    const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const androidInit = AndroidInitializationSettings('@mipmap/launcher_icon');
     // Don't request iOS permissions here — FCM.requestPermission already did,
     // otherwise the user would be prompted twice.
     const darwinInit = DarwinInitializationSettings(
@@ -154,7 +154,7 @@ class NotificationService {
             importance: Importance.high,
             priority: Priority.high,
             playSound: true, // default system sound
-            icon: '@mipmap/ic_launcher',
+            icon: '@mipmap/launcher_icon',
           ),
         ),
         payload: message.data.isEmpty ? null : jsonEncode(message.data),
