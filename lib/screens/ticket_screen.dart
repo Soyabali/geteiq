@@ -289,8 +289,10 @@ class _TicketScreenState extends State<TicketScreen> {
                             ),
                           ),
                           const SizedBox(height: AppSpacing.xl),
+                          // Show the QR Code upon request by Security
+                          //  'Show this QR code or OTP to the guard at gate',
                           Text(
-                            'Show this QR code or OTP to the guard at gate',
+                            'Show the QR Code upon request by Security',
                             textAlign: TextAlign.center,
                             style: t.bodySmall?.copyWith(
                               color: AppColors.ticketMuted,

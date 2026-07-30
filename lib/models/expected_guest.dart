@@ -2,7 +2,7 @@
 enum GuestStage {
   expected('Expected'),
   checkin('Check-in'),
-  meeting('Meeting'),
+  meeting('Not Arrived'),
   checkout('Check-out');
 
   const GuestStage(this.label);
@@ -25,6 +25,8 @@ class ExpectedGuest {
     this.note = '—',
     this.approval = 'APPROVED',
     this.statusText = '—',
+    this.checkedIn = '',
+    this.checkedOut = '',
   });
 
   /// sQRCodeVal from the list API — the id the status-update API needs.
@@ -40,21 +42,33 @@ class ExpectedGuest {
   final GuestStage stage;
   final String statusText; // sStatus — raw status text from the API
 
+  /// dCheckedIn — '' while the API still sends null for it.
+  final String checkedIn;
+
+  /// dCheckedOut — '' while the API still sends null for it.
+  final String checkedOut;
+
   /// Returns a copy with a new stage (used when the guard taps an action).
-  ExpectedGuest copyWith({GuestStage? stage, String? statusText}) =>
-      ExpectedGuest(
-        qrCodeVal: qrCodeVal,
-        name: name,
-        plus: plus,
-        requestedBy: requestedBy,
-        phone: phone,
-        when: when,
-        duration: duration,
-        note: note,
-        approval: approval,
-        stage: stage ?? this.stage,
-        statusText: statusText ?? this.statusText,
-      );
+  ExpectedGuest copyWith({
+    GuestStage? stage,
+    String? statusText,
+    String? checkedIn,
+    String? checkedOut,
+  }) => ExpectedGuest(
+    qrCodeVal: qrCodeVal,
+    name: name,
+    plus: plus,
+    requestedBy: requestedBy,
+    phone: phone,
+    when: when,
+    duration: duration,
+    note: note,
+    approval: approval,
+    stage: stage ?? this.stage,
+    statusText: statusText ?? this.statusText,
+    checkedIn: checkedIn ?? this.checkedIn,
+    checkedOut: checkedOut ?? this.checkedOut,
+  );
 
   String get searchText =>
       '$name $requestedBy $phone $note'.toLowerCase();

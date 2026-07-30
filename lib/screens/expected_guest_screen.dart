@@ -85,6 +85,8 @@ class _ExpectedGuestScreenState extends State<ExpectedGuestScreen> {
       note: v.note.isEmpty ? '—' : v.note, // sNote
       stage: _stageFromStatus(v.status), // sStatus -> stage
       statusText: v.status.isEmpty ? '—' : v.status, // sStatus -> shown as-is
+      checkedIn: v.checkedIn, // dCheckedIn  ('' while null)
+      checkedOut: v.checkedOut, // dCheckedOut ('' while null)
     );
   }
 
@@ -101,12 +103,16 @@ class _ExpectedGuestScreenState extends State<ExpectedGuestScreen> {
   // sStatus text -> GuestStage (drives the highlighted action button + counts).
   GuestStage _stageFromStatus(String status) {
     final s = status.toLowerCase();
-    if (s.contains('checkout') ||
+    // Matches "Checked Out", "Check-out", "Check out", "Checkout", etc.
+    if (s.contains('checked out') ||
+        s.contains('checkout') ||
         s.contains('check-out') ||
         s.contains('check out')) {
       return GuestStage.checkout;
     }
-    if (s.contains('checkin') ||
+    // Matches "Checked In", "Check-in", "Check in", "Checkin", etc.
+    if (s.contains('checked in') ||
+        s.contains('checkin') ||
         s.contains('check-in') ||
         s.contains('check in')) {
       return GuestStage.checkin;
@@ -124,12 +130,36 @@ class _ExpectedGuestScreenState extends State<ExpectedGuestScreen> {
 
   int _countOf(GuestStage stage) => _all.where((g) => g.stage == stage).length;
 
+  // Guests currently on the premises: checked in and not yet checked out.
+  // There is no separate "start meeting" action in the guard flow, so
+  // Check-in and Meeting always show — and filter to — this same set; a
+  // Check-out immediately removes the guest from both.
+  int get _onPremisesCount => _all
+      .where(
+        (g) => g.stage == GuestStage.checkin || g.stage == GuestStage.meeting,
+      )
+      .length;
+
+  // Still-to-arrive guests: total roster minus everyone who has already
+  // checked in (on premises) or checked out. A guest only re-enters this
+  // count via the "Not arrived" button, which resets their stage back to
+  // expected.
+  int get _expectedCount => _countOf(GuestStage.expected);
+
+  bool _matchesStageFilter(ExpectedGuest g) {
+    final f = _stageFilter;
+    if (f == null) return true;
+    if (f == GuestStage.checkin || f == GuestStage.meeting) {
+      return g.stage == GuestStage.checkin || g.stage == GuestStage.meeting;
+    }
+    return g.stage == f; // expected / checkout
+  }
+
   List<ExpectedGuest> get _filtered {
     final q = _search.text.trim().toLowerCase();
     return _all.where((g) {
       final matchesQuery = q.isEmpty || g.searchText.contains(q);
-      final matchesStage = _stageFilter == null || g.stage == _stageFilter;
-      return matchesQuery && matchesStage;
+      return matchesQuery && _matchesStageFilter(g);
     }).toList();
   }
 
@@ -286,9 +316,9 @@ class _ExpectedGuestScreenState extends State<ExpectedGuestScreen> {
                     Padding(
                       padding: EdgeInsets.symmetric(horizontal: gutter),
                       child: _StatGrid(
-                        expected: _countOf(GuestStage.expected),
-                        checkin: _countOf(GuestStage.checkin),
-                        meeting: _countOf(GuestStage.meeting),
+                        expected: _expectedCount,
+                        checkin: _onPremisesCount,
+                        meeting: _onPremisesCount,
                         checkout: _countOf(GuestStage.checkout),
                         selected: _stageFilter,
                         onTap: _toggleFilter,
@@ -546,6 +576,10 @@ class _GuestCard extends StatelessWidget {
                     ),
                     _MetaLine(label: 'Note:', value: guest.note),
                     _MetaLine(label: 'Status:', value: guest.statusText),
+                    // dCheckedIn / dCheckedOut — null until the guard acts on
+                    // the pass, which the model maps to '' (blank value).
+                    _MetaLine(label: 'Checked In:', value: guest.checkedIn),
+                    _MetaLine(label: 'Checked Out:', value: guest.checkedOut),
                   ],
                 ),
               ),

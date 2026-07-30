@@ -39,6 +39,15 @@ class _InviteSetupSheetState extends State<_InviteSetupSheet> {
     return TimeOfDay(hour: t.hour, minute: t.minute);
   }
 
+  /// True when the invite's date is today — the only case where "Starting
+  /// from" needs a lower bound. A future date (e.g. a next-day appointment)
+  /// may start at any time.
+  bool get _isDateToday {
+    final now = DateTime.now();
+    final d = _invite.date;
+    return d.year == now.year && d.month == now.month && d.day == now.day;
+  }
+
   Future<void> _pickDate() async {
     final now = DateTime.now();
     final picked = await showDatePicker(
@@ -52,14 +61,32 @@ class _InviteSetupSheetState extends State<_InviteSetupSheet> {
 
   Future<void> _pickTime() async {
     final picked = await showTimePicker(context: context, initialTime: _start);
-    if (picked != null) {
-      setState(
-        () => _invite.startTime = TimeOfDayValue(
-          hour: picked.hour,
-          minute: picked.minute,
-        ),
-      );
+    if (picked == null) return;
+
+    // For today's date, don't allow a start time that's already in the
+    // past (e.g. now is 2:40, so 2:39 is invalid). A future date has no
+    // such constraint — any time of day is a valid start.
+    if (_isDateToday) {
+      final now = TimeOfDay.now();
+      final pickedMinutes = picked.hour * 60 + picked.minute;
+      final nowMinutes = now.hour * 60 + now.minute;
+      if (pickedMinutes < nowMinutes) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(
+            const SnackBar(content: Text("Pick a time that hasn't passed yet.")),
+          );
+        return;
+      }
     }
+
+    setState(
+      () => _invite.startTime = TimeOfDayValue(
+        hour: picked.hour,
+        minute: picked.minute,
+      ),
+    );
   }
 
   Future<void> _pickDuration() async {
@@ -151,8 +178,7 @@ class _InviteSetupSheetState extends State<_InviteSetupSheet> {
   String get _dateLabel {
     final now = DateTime.now();
     final d = _invite.date;
-    final isToday =
-        d.year == now.year && d.month == now.month && d.day == now.day;
+    final isToday = _isDateToday;
     final tomorrow = now.add(const Duration(days: 1));
     final isTomorrow =
         d.year == tomorrow.year &&
@@ -191,28 +217,17 @@ class _InviteSetupSheetState extends State<_InviteSetupSheet> {
               const _Grabber(),
               Flexible(
                 child: SingleChildScrollView(
-                  padding: EdgeInsets.fromLTRB(
-                    gutter,
-                    AppSpacing.xl,
-                    gutter,
-                    AppSpacing.lg,
-                  ),
+                  padding: EdgeInsets.fromLTRB(gutter, 15, gutter, AppSpacing.lg),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _FrequencyTabs(
-                        value: _invite.frequency,
-                        onChanged: (f) => setState(() => _invite.frequency = f),
-                      ),
-                      // Single, tight gap between "Once" and "Select Date".
-                      const SizedBox(height: AppSpacing.xl),
                       _Field(
                         label: 'Select Date',
                         value: _dateLabel,
                         icon: Icons.calendar_today_outlined,
                         onTap: _pickDate,
                       ),
-                      const SizedBox(height: AppSpacing.xl),
+                      const SizedBox(height: AppSpacing.lg),
                       // Two columns on normal widths, stacked when cramped.
                       LayoutBuilder(
                         builder: (context, c) {
@@ -275,72 +290,6 @@ class _Grabber extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppColors.border,
         borderRadius: BorderRadius.circular(AppRadii.pill),
-      ),
-    );
-  }
-}
-
-/// Underlined "Once / Frequently" segmented control.
-class _FrequencyTabs extends StatelessWidget {
-  const _FrequencyTabs({required this.value, required this.onChanged});
-
-  final InviteFrequency value;
-  final ValueChanged<InviteFrequency> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    final t = Theme.of(context).textTheme;
-
-    Widget tab(InviteFrequency f, String label, {bool last = false}) {
-      final selected = f == value;
-      return GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: () => onChanged(f),
-        child: Padding(
-          // The last tab doesn't need a trailing gap — keeping it on every
-          // tab was the difference between fitting and overflowing by a few
-          // pixels on narrower phones (~360-390 logical width).
-          padding: EdgeInsets.only(
-            right: last ? 0 : AppSpacing.xxl,
-            bottom: AppSpacing.sm,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                label,
-                style: t.titleLarge?.copyWith(
-                  color: selected ? AppColors.ink : AppColors.faint,
-                ),
-              ),
-              const SizedBox(height: AppSpacing.sm),
-              AnimatedContainer(
-                duration: const Duration(milliseconds: 220),
-                curve: Curves.easeOut,
-                height: 3,
-                width: selected ? 28 : 0,
-                decoration: BoxDecoration(
-                  color: AppColors.brand,
-                  borderRadius: BorderRadius.circular(AppRadii.pill),
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
-    // A defensive horizontal scroll (rather than a bare Row) means a very
-    // narrow phone or larger text scale shrinks the tabs' hit area instead of
-    // hard-overflowing the layout.
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(
-        children: [
-          tab(InviteFrequency.once, 'Once'),
-         // tab(InviteFrequency.frequently, 'Frequently', last: true),
-        ],
       ),
     );
   }

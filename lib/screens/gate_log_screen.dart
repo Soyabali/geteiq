@@ -262,7 +262,7 @@ class _GateLogCard extends StatelessWidget {
           ),
           const _RowDivider(),
           _LogRow(
-            label: 'Req .By',
+            label: 'Meet With',
             value: entry.userName.isEmpty ? '—' : entry.userName,
           ),
           if (entry.note.isNotEmpty) ...[

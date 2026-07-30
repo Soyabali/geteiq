@@ -65,7 +65,7 @@ class Invite {
     this.isPrivate = false,
     DateTime? date,
     this.startTime,
-    this.validForHours = 8,
+    this.validForHours = 1,
     List<Guest>? guests,
     this.note = '',
     String? code,

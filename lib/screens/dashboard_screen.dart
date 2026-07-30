@@ -379,7 +379,7 @@ class _AddGuestBar extends StatelessWidget {
           ),
           child: CenteredBar(
             child: PrimaryButton(
-              label: 'Add Guest',
+              label: 'Visitor Pass',
               trailing: Icons.arrow_forward_rounded,
               onPressed: () => _onAddGuest(context),
             ),

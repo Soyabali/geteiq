@@ -204,6 +204,12 @@ class _YesterdayGuestCard extends StatelessWidget {
             label: 'Status',
             value: visitor.status.isEmpty ? '—' : visitor.status,
           ),
+          const _RowDivider(),
+          // dCheckedIn / dCheckedOut — the API sends null until the guard acts
+          // on the pass, which the model maps to '', so these read blank.
+          _LogRow(label: 'Checked In', value: visitor.checkedIn),
+          const _RowDivider(),
+          _LogRow(label: 'Checked Out', value: visitor.checkedOut),
         ],
       ),
     );

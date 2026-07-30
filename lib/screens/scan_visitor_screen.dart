@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../services/VMSGaurdUpdateStatus.dart';
+import '../services/VMSGaurdVisitorRequestList.dart';
 import '../theme/tokens.dart';
 
 /// Guard-only screen: opens the camera, reads a visitor QR/barcode pass, and
@@ -25,6 +26,11 @@ class _ScanVisitorScreenState extends State<ScanVisitorScreen> {
   bool _torchOn = false;
   bool _submitting = false; // "Done" -> status api in progress
 
+  // The barcode only carries the pass code, so the guest's name is looked up
+  // from today's guard list by matching sQRCodeVal — see [_lookupGuestName].
+  String? _guestName; // null until the lookup resolves
+  bool _lookingUpName = false; // shows "Looking up…" on the card
+
   @override
   void dispose() {
     _controller.dispose();
@@ -34,7 +40,7 @@ class _ScanVisitorScreenState extends State<ScanVisitorScreen> {
   /// "Done" -> mark this pass checked-in (iStatus = 2) using the scanned code
   /// as sQRCodeVal, then toast the server's reply.
   Future<void> _done() async {
-    final code = _raw?.trim() ?? '';
+    final code = _extractCode(_raw ?? '');
     if (code.isEmpty || _submitting) return;
 
     // Grabbed before awaiting so the toast still shows after this route pops.
@@ -134,11 +140,77 @@ class _ScanVisitorScreenState extends State<ScanVisitorScreen> {
     debugPrint('🔎 Scanned raw: ${code.trim()}');
     setState(() => _raw = code.trim());
     _controller.stop(); // freeze the camera while showing the result
+    _lookupGuestName(); // resolve the name behind the scanned code
   }
 
   void _scanAgain() {
-    setState(() => _raw = null);
+    setState(() {
+      _raw = null;
+      _guestName = null;
+      _lookingUpName = false;
+    });
     _controller.start();
+  }
+
+  /// The pass code (sQRCodeVal) carried by the scanned text.
+  ///
+  /// Most passes encode the bare code, but the in-app ticket encodes a
+  /// `gateiq://invite?code=…` URI, so the code is pulled out of the known
+  /// key when one is present and the whole trimmed text is used otherwise.
+  String _extractCode(String raw) {
+    final trimmed = raw.trim();
+    const keys = ['sQRCodeVal', 'qrCodeVal', 'code', 'sCode'];
+
+    // JSON object, e.g. {"sQRCodeVal":"911309", ...}
+    try {
+      final decoded = json.decode(trimmed);
+      if (decoded is Map) {
+        for (final k in keys) {
+          final v = '${decoded[k] ?? ''}'.trim();
+          if (v.isNotEmpty) return v;
+        }
+      }
+    } catch (_) {
+      // not JSON — fall through
+    }
+
+    // URI query, e.g. gateiq://invite?code=911309&flat=T%201%20304
+    final uri = Uri.tryParse(trimmed);
+    if (uri != null && uri.hasScheme && uri.queryParameters.isNotEmpty) {
+      for (final k in keys) {
+        final v = (uri.queryParameters[k] ?? '').trim();
+        if (v.isNotEmpty) return v;
+      }
+    }
+
+    return trimmed; // bare code — the common case
+  }
+
+  /// Looks the scanned code up in today's guard list to get the guest's name.
+  ///
+  /// The barcode itself carries no name, so this matches the scanned code
+  /// against `sQRCodeVal` and reads `sGuestNames` off that row. Failure is
+  /// silent — the card just falls back to showing the code alone, and the
+  /// guard can still tap Done.
+  Future<void> _lookupGuestName() async {
+    final code = _extractCode(_raw ?? '');
+    if (code.isEmpty) return;
+
+    setState(() => _lookingUpName = true);
+    try {
+      final list = await GuardVisitorRepo().getVisitorList(context);
+      if (!mounted) return;
+
+      final match = list.where((v) => v.qrCodeVal.trim() == code).firstOrNull;
+      setState(() {
+        _guestName = match?.guestNames.trim();
+        _lookingUpName = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      debugPrint('Guest name lookup failed: $e');
+      setState(() => _lookingUpName = false);
+    }
   }
 
   /// Turns the raw scanned text into label/value pairs for the details card.
@@ -292,6 +364,8 @@ class _ScanVisitorScreenState extends State<ScanVisitorScreen> {
             Align(
               alignment: Alignment.bottomCenter,
               child: _ResultCard(
+                guestName: _guestName,
+                lookingUpName: _lookingUpName,
                 details: _details(_raw!),
                 submitting: _submitting,
                 onScanAgain: _scanAgain,
@@ -336,12 +410,18 @@ class _ScanFrame extends StatelessWidget {
 /// Bottom card showing the decoded pass details.
 class _ResultCard extends StatelessWidget {
   const _ResultCard({
+    required this.guestName,
+    required this.lookingUpName,
     required this.details,
     required this.submitting,
     required this.onScanAgain,
     required this.onDone,
   });
 
+  /// sGuestNames for the scanned pass. Null until the lookup finishes, or when
+  /// the code matched no row in today's list.
+  final String? guestName;
+  final bool lookingUpName;
   final List<MapEntry<String, String>> details;
   final bool submitting;
   final VoidCallback onScanAgain;
@@ -378,6 +458,35 @@ class _ResultCard extends StatelessWidget {
             const SizedBox(height: AppSpacing.md),
             const Divider(height: 1),
             const SizedBox(height: AppSpacing.md),
+
+            // Guest name — not in the barcode, so it comes from the list API
+            // keyed on the scanned code. Sits above the code, in the same
+            // "label: value" fashion as the rows below.
+            // Padding(
+            //   padding: const EdgeInsets.only(bottom: 6),
+            //   child: Text.rich(
+            //     TextSpan(
+            //       style: t.bodyMedium?.copyWith(color: AppColors.inkSoft),
+            //       children: [
+            //         TextSpan(
+            //           text: 'Name: ',
+            //           style: t.bodyMedium?.copyWith(color: AppColors.faint),
+            //         ),
+            //         TextSpan(
+            //           text: lookingUpName
+            //               ? 'Looking up…'
+            //               : (guestName == null || guestName!.isEmpty
+            //                     ? '—'
+            //                     : guestName!),
+            //           style: t.bodyMedium?.copyWith(
+            //             fontWeight: FontWeight.w700,
+            //             color: AppColors.ink,
+            //           ),
+            //         ),
+            //       ],
+            //     ),
+            //   ),
+            // ),
 
             // Every field the barcode carried — one entry or many, all shown
             // the same "label: value" way.

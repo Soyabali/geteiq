@@ -275,34 +275,84 @@ class _GuestCard extends StatelessWidget {
           const Divider(height: 1, color: AppColors.borderSoft),
           const SizedBox(height: AppSpacing.md),
 
-          // The mock's phone slot — this API sends no contact number.
+          // Labels are passed WITHOUT the ":" — _MetaLine draws it in its own
+          // fixed column so every colon lines up vertically down the card.
           _MetaLine(
             icon: Icons.qr_code_rounded,
-            value: 'QR Code : '
-                '${visitor.qrCodeVal.isEmpty ? '—' : visitor.qrCodeVal}',
+            label: 'QR Code',
+            value: visitor.qrCodeVal.isEmpty ? '—' : visitor.qrCodeVal,
           ),
           const SizedBox(height: AppSpacing.sm),
-          _MetaLine(icon: Icons.schedule_rounded, value: _meta),
+          _MetaLine(
+            icon: Icons.schedule_rounded,
+            label: 'Date / Time',
+            value: _meta,
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          // dCheckedIn / dCheckedOut — null until the guard acts on the pass,
+          // which the model maps to '', so the value reads blank.
+          _MetaLine(
+            icon: Icons.login_rounded,
+            label: 'Checked In',
+            value: visitor.checkedIn,
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          _MetaLine(
+            icon: Icons.logout_rounded,
+            label: 'Checked Out',
+            value: visitor.checkedOut,
+          ),
         ],
       ),
     );
   }
 }
 
-/// A small icon + text line inside the card.
+/// A small "icon  Label : value" line inside the card.
+///
+/// [label] is passed WITHOUT its colon. The label sits in a fixed-width box
+/// and the ":" is drawn as its own widget right after it, so the colons of
+/// every row land on the same vertical line no matter how long the label is.
 class _MetaLine extends StatelessWidget {
-  const _MetaLine({required this.icon, required this.value});
+  const _MetaLine({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
 
   final IconData icon;
+  final String label;
   final String value;
+
+  /// Width of the label column — sized for the longest label on this card
+  /// ("Checked Out" / "Date / Time"), which is what fixes the colon's x
+  /// position. Scaled down from the 96 the Yesterday/Month cards use, since
+  /// those label rows are bodyMedium and these are the smaller bodySmall.
+  static const double _labelWidth = 88;
 
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context).textTheme;
+    final labelStyle = t.bodySmall?.copyWith(color: AppColors.faint);
+
     return Row(
       children: [
         Icon(icon, size: 15, color: AppColors.faint),
         const SizedBox(width: AppSpacing.sm),
+        SizedBox(
+          width: _labelWidth,
+          child: Text(
+            label,
+            style: labelStyle,
+            maxLines: 1,
+            // Degrades gracefully instead of overflowing if a future label is
+            // longer than the column, or at a large OS text scale.
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        // The shared colon column.
+        Text(':', style: labelStyle),
+        const SizedBox(width: AppSpacing.xs),
         Expanded(
           child: Text(
             value,
