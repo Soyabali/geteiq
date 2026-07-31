@@ -361,7 +361,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 border: InputBorder.none,
                 enabledBorder: InputBorder.none,
                 focusedBorder: InputBorder.none,
-                hintText: '98765 43210',
+                hintText: '',
                 hintStyle: t.titleMedium?.copyWith(color: AppColors.faint),
               ),
             ),
