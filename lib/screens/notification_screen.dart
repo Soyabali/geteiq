@@ -4,6 +4,10 @@ import '../models/app_notification.dart';
 import '../services/NotificationList.dart';
 import '../theme/tokens.dart';
 
+/// Tablet breakpoint. Phones (< 600) always render the original, untouched
+/// flat white list.
+bool _isTablet(BuildContext context) => MediaQuery.sizeOf(context).width >= 600;
+
 /// Notifications screen — professional white layout, grouped by day, with a
 /// slow open transition (see [route]) and an iOS-style back button.
 ///
@@ -103,14 +107,16 @@ class _NotificationScreenState extends State<NotificationScreen> {
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context).textTheme;
+    final isTablet = _isTablet(context);
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: isTablet ? AppColors.canvas : Colors.white,
       appBar: AppBar(
-        backgroundColor: Colors.white,
-        surfaceTintColor: Colors.white,
+        backgroundColor: isTablet ? AppColors.canvas : Colors.white,
+        surfaceTintColor: isTablet ? AppColors.canvas : Colors.white,
         elevation: 0,
         scrolledUnderElevation: 0.5,
+        toolbarHeight: isTablet ? 72 : kToolbarHeight,
         titleSpacing: 0,
         centerTitle: true,
         // iOS-style back chevron.
@@ -121,7 +127,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
         ),
         title: Text(
           'Notifications',
-          style: t.titleLarge?.copyWith(fontSize: 20),
+          style: t.titleLarge?.copyWith(fontSize: isTablet ? 24 : 20),
         ),
         actions: [
           IconButton(
@@ -158,21 +164,52 @@ class _NotificationScreenState extends State<NotificationScreen> {
     }
 
     final sections = _sections;
-    return RefreshIndicator(
-      color: AppColors.brand,
-      onRefresh: () => _load(silent: true),
-      child: ListView(
-        physics: const BouncingScrollPhysics(
-          parent: AlwaysScrollableScrollPhysics(),
-        ),
-        padding: const EdgeInsets.only(bottom: AppSpacing.xxl),
-        children: [
-          for (final s in sections) ...[
-            _SectionHeader(label: s.label),
-            ...s.items.map((n) => _NotifTile(item: n)),
-          ],
-        ],
-      ),
+
+    return Builder(
+      builder: (context) {
+        final isTablet = _isTablet(context);
+
+        // Notifications are chronological, so — unlike the guest-list
+        // screens — a grid would scramble the reading order. Instead: cap
+        // the reading width and centre it, like a real notification centre,
+        // with each row promoted to its own card. RefreshIndicator + ListView
+        // stay the single scrollable either way, so pull-to-refresh behaves
+        // identically; only the padding and item widget change for tablet.
+        double horizontalInset = 0;
+        if (isTablet) {
+          final width = MediaQuery.sizeOf(context).width;
+          const maxContentWidth = 720.0;
+          final gutter = AppSpacing.gutter(context);
+          horizontalInset = width > maxContentWidth + gutter * 2
+              ? (width - maxContentWidth) / 2
+              : gutter;
+        }
+
+        return RefreshIndicator(
+          color: AppColors.brand,
+          onRefresh: () => _load(silent: true),
+          child: ListView(
+            physics: const BouncingScrollPhysics(
+              parent: AlwaysScrollableScrollPhysics(),
+            ),
+            padding: EdgeInsets.fromLTRB(
+              horizontalInset,
+              isTablet ? AppSpacing.lg : 0,
+              horizontalInset,
+              AppSpacing.xxl,
+            ),
+            children: [
+              for (final s in sections) ...[
+                _SectionHeader(label: s.label),
+                if (isTablet)
+                  ...s.items.map((n) => _TabletNotifTile(item: n))
+                else
+                  ...s.items.map((n) => _NotifTile(item: n)),
+              ],
+            ],
+          ),
+        );
+      },
     );
   }
 }
@@ -207,6 +244,87 @@ class _SectionHeader extends StatelessWidget {
           fontWeight: FontWeight.w700,
           letterSpacing: 0.8,
         ),
+      ),
+    );
+  }
+}
+
+/// Tablet notification row — same data as [_NotifTile], promoted to its own
+/// bordered/shadowed card with a gap below it (instead of a flush row flat
+/// against the page), a bigger icon badge, and roomier type. Purely visual —
+/// no new fields, no new behaviour.
+class _TabletNotifTile extends StatelessWidget {
+  const _TabletNotifTile({required this.item});
+
+  final AppNotification item;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context).textTheme;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: AppSpacing.sm),
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(AppRadii.lg),
+        border: Border.all(color: AppColors.borderSoft),
+        boxShadow: AppShadows.card,
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: item.color.withValues(alpha: 0.12),
+              shape: BoxShape.circle,
+            ),
+            alignment: Alignment.center,
+            clipBehavior: Clip.antiAlias,
+            child: item.hasImage
+                ? Image.network(
+                    item.imageUrl,
+                    width: 48,
+                    height: 48,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) =>
+                        Icon(item.icon, color: item.color, size: 24),
+                  )
+                : Icon(item.icon, color: item.color, size: 24),
+          ),
+          const SizedBox(width: AppSpacing.md),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  item.title.isEmpty ? 'Notification' : item.title,
+                  style: t.titleSmall?.copyWith(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.ink,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  item.message,
+                  style: t.bodyMedium?.copyWith(
+                    color: AppColors.muted,
+                    height: 1.4,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: AppSpacing.md),
+          Text(
+            item.timeLabel,
+            style: t.labelSmall?.copyWith(color: AppColors.faint),
+          ),
+        ],
       ),
     );
   }

@@ -68,10 +68,12 @@ class _ScanVisitorScreenState extends State<ScanVisitorScreen> {
         ok: ok,
       );
 
-      // Success -> close the scanner. Failure -> stay put so the guard can
+      // Success -> close the scanner, returning `true` so the screen that
+      // opened it (e.g. Expected Guests) knows the status actually changed
+      // and can refresh its list. Failure -> stay put so the guard can
       // re-scan instead of losing the camera.
       if (ok) {
-        navigator.pop();
+        navigator.pop(true);
       } else {
         setState(() => _submitting = false);
       }

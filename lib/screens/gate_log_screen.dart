@@ -8,6 +8,14 @@ import '../widgets/app_card.dart';
 import '../widgets/app_scaffold.dart';
 import '../widgets/pill_search_field.dart';
 
+/// Tablet breakpoint. Phones (< 600) always render the original, untouched
+/// single-column mobile list. Mirrors the same helper in
+/// invite_guest_list_screen.dart so both list screens share one convention.
+bool _isTablet(BuildContext context) => MediaQuery.sizeOf(context).width >= 600;
+
+/// Landscape / large tablets get a 3-column grid; portrait-ish tablets get 2.
+bool _isWideTablet(BuildContext context) => MediaQuery.sizeOf(context).width >= 900;
+
 /// "Gate Log" — guests the guard logged at the gate.
 ///
 /// Role-driven, from [GateEntryRepo]:
@@ -131,6 +139,7 @@ class _GateLogScreenState extends State<GateLogScreen> {
   Widget build(BuildContext context) {
     final gutter = AppSpacing.gutter(context);
     final rows = _filtered;
+    final isTablet = _isTablet(context);
 
     return Scaffold(
       backgroundColor: AppColors.canvas,
@@ -146,29 +155,53 @@ class _GateLogScreenState extends State<GateLogScreen> {
       ),
       body: SafeArea(
         bottom: false,
-        child: CenteredFill(
-          child: Column(
-            children: [
-              // ---- Search ----
-              Padding(
-                padding: EdgeInsets.fromLTRB(
-                  gutter,
-                  AppSpacing.xs,
-                  gutter,
-                  AppSpacing.sm,
+        child: isTablet
+            ? Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 1120),
+                  child: Column(
+                    children: [
+                      Padding(
+                        padding: EdgeInsets.fromLTRB(
+                          gutter,
+                          AppSpacing.md,
+                          gutter,
+                          AppSpacing.lg,
+                        ),
+                        child: PillSearchField(
+                          controller: _search,
+                          hint: 'Search guard guests',
+                          onChanged: () => setState(() {}),
+                        ),
+                      ),
+                      Expanded(child: _body(rows, gutter)),
+                    ],
+                  ),
                 ),
-                child: PillSearchField(
-                  controller: _search,
-                  hint: 'Search guard guests',
-                  onChanged: () => setState(() {}),
+              )
+            : CenteredFill(
+                child: Column(
+                  children: [
+                    // ---- Search ----
+                    Padding(
+                      padding: EdgeInsets.fromLTRB(
+                        gutter,
+                        AppSpacing.xs,
+                        gutter,
+                        AppSpacing.sm,
+                      ),
+                      child: PillSearchField(
+                        controller: _search,
+                        hint: 'Search guard guests',
+                        onChanged: () => setState(() {}),
+                      ),
+                    ),
+
+                    // ---- List ----
+                    Expanded(child: _body(rows, gutter)),
+                  ],
                 ),
               ),
-
-              // ---- List ----
-              Expanded(child: _body(rows, gutter)),
-            ],
-          ),
-        ),
       ),
     );
   }
@@ -194,6 +227,17 @@ class _GateLogScreenState extends State<GateLogScreen> {
             : 'No guests match "${_search.text.trim()}"',
       );
     }
+
+    if (_isTablet(context)) {
+      return _GateLogGrid(
+        rows: rows,
+        gutter: gutter,
+        isGuard: _isGuard,
+        onApprove: (g) => _onDecision(g, GateDecision.approved),
+        onReject: (g) => _onDecision(g, GateDecision.rejected),
+      );
+    }
+
     return ListView.separated(
       physics: const BouncingScrollPhysics(
         parent: AlwaysScrollableScrollPhysics(),
@@ -213,6 +257,74 @@ class _GateLogScreenState extends State<GateLogScreen> {
           isGuard: _isGuard,
           onApprove: () => _onDecision(g, GateDecision.approved),
           onReject: () => _onDecision(g, GateDecision.rejected),
+        );
+      },
+    );
+  }
+}
+
+// ============================================================================
+//  TABLET GRID
+// ============================================================================
+
+/// Tablet grid — 2 columns on portrait/medium tablets, 3 on wide landscape,
+/// so the list actually uses the extra width instead of floating a single
+/// phone-width column in the middle of the screen. Same approach as the
+/// Invite Guest List tablet grid: a Wrap of fixed-width cards rather than a
+/// fixed-extent GridView, since card height varies (the "Note" row only
+/// shows up sometimes), so each card keeps its own natural height.
+class _GateLogGrid extends StatelessWidget {
+  const _GateLogGrid({
+    required this.rows,
+    required this.gutter,
+    required this.isGuard,
+    required this.onApprove,
+    required this.onReject,
+  });
+
+  final List<GateEntry> rows;
+  final double gutter;
+  final bool isGuard;
+  final ValueChanged<GateEntry> onApprove;
+  final ValueChanged<GateEntry> onReject;
+
+  @override
+  Widget build(BuildContext context) {
+    final crossAxisCount = _isWideTablet(context) ? 3 : 2;
+    const spacing = AppSpacing.md;
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final available = constraints.maxWidth - gutter * 2;
+        final cardWidth =
+            (available - spacing * (crossAxisCount - 1)) / crossAxisCount;
+
+        return SingleChildScrollView(
+          physics: const BouncingScrollPhysics(
+            parent: AlwaysScrollableScrollPhysics(),
+          ),
+          padding: EdgeInsets.fromLTRB(
+            gutter,
+            AppSpacing.sm,
+            gutter,
+            AppSpacing.xxl,
+          ),
+          child: Wrap(
+            spacing: spacing,
+            runSpacing: spacing,
+            children: [
+              for (final g in rows)
+                SizedBox(
+                  width: cardWidth,
+                  child: _GateLogCard(
+                    entry: g,
+                    isGuard: isGuard,
+                    onApprove: () => onApprove(g),
+                    onReject: () => onReject(g),
+                  ),
+                ),
+            ],
+          ),
         );
       },
     );

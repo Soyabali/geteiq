@@ -18,6 +18,10 @@ import '../widgets/app_button.dart';
 import '../widgets/app_scaffold.dart';
 import '../widgets/brand_mark.dart';
 
+/// Tablet breakpoint. Phones (< 600) always render the original,
+/// untouched mobile layout.
+bool _isTablet(BuildContext context) => MediaQuery.sizeOf(context).width >= 600;
+
 /// Screen 8 — the shareable gate pass.
 ///
 /// Uses the warmer ticket palette from the design so it reads as a distinct
@@ -207,24 +211,34 @@ class _TicketScreenState extends State<TicketScreen> {
   Widget build(BuildContext context) {
     final t = Theme.of(context).textTheme;
     final gutter = AppSpacing.gutter(context);
+    final isTablet = _isTablet(context);
     final width = MediaQuery.sizeOf(context).width;
     // QR scales with the device but stays scannable and never overflows.
-    final qrSize = (width * 0.46).clamp(150.0, 220.0);
+    // Tablets get a fixed, larger size instead of the phone-width formula,
+    // since the card itself is no longer full-bleed.
+    final qrSize = isTablet ? 240.0 : (width * 0.46).clamp(150.0, 220.0);
 
     return Scaffold(
       backgroundColor: AppColors.ticketBg,
       appBar: AppBar(
         backgroundColor: AppColors.ticketBg,
+        toolbarHeight: isTablet ? 72 : kToolbarHeight,
         titleSpacing: gutter,
         leadingWidth: gutter + 32,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
+          icon: Icon(
+            Icons.arrow_back_ios_new_rounded,
+            size: isTablet ? 22 : 20,
+          ),
           onPressed: () => Navigator.of(context).maybePop(),
         ),
         centerTitle: true, // title sits in the middle of the app bar
         title: Text(
           'Visitor Pass',
-          style: t.headlineSmall?.copyWith(color: AppColors.ticketInk),
+          style: t.headlineSmall?.copyWith(
+            color: AppColors.ticketInk,
+            fontSize: isTablet ? 24 : null,
+          ),
         ),
         actions: [
           // Tap -> capture the ticket as an image and open the native share
@@ -251,32 +265,24 @@ class _TicketScreenState extends State<TicketScreen> {
         ],
       ),
       body: SafeArea(
-        bottom: false,
-        child: Column(
-          children: [
-            Expanded(
-              child: CenteredFill(
-                // The scroll view is OUTSIDE the boundary on purpose. If the
-                // boundary wrapped the scrollable, toImage() would only capture
-                // the visible viewport and the shared PNG would be cut off.
-                // Wrapping the full-height Column instead means the snapshot
-                // always contains the whole pass, however tall it is.
-                child: SingleChildScrollView(
-                  physics: const BouncingScrollPhysics(
-                    parent: AlwaysScrollableScrollPhysics(),
-                  ),
-                  // Everything inside this boundary is what gets captured and shared.
-                  child: RepaintBoundary(
-                    key: _shareKey,
-                    child: Container(
-                      color: AppColors.ticketBg,
-                      padding: EdgeInsets.fromLTRB(
-                        gutter,
-                        AppSpacing.lg,
-                        gutter,
-                        AppSpacing.xxl,
-                      ),
-                      child: Column(
+        bottom: isTablet,
+        child: Builder(
+          builder: (_) {
+            // Everything inside this boundary is what gets captured and
+            // shared — identical on mobile and tablet, so the exported pass
+            // image never changes. Tablet only adds a decorative frame
+            // AROUND this, outside the boundary.
+            final Widget passContent = RepaintBoundary(
+              key: _shareKey,
+              child: Container(
+                color: AppColors.ticketBg,
+                padding: EdgeInsets.fromLTRB(
+                  gutter,
+                  AppSpacing.lg,
+                  gutter,
+                  AppSpacing.xxl,
+                ),
+                child: Column(
                         mainAxisSize: MainAxisSize.min,
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
@@ -398,47 +404,154 @@ class _TicketScreenState extends State<TicketScreen> {
                         ],
                       ), // Column
                     ), // Container
-                  ), // RepaintBoundary
-                ), // SingleChildScrollView
-              ), // CenteredFill
-            ), // Expanded
-            // Share button — same look & feel as the "Done" button below.
-            // Kept outside the RepaintBoundary so it never appears in the shot.
-            Padding(
-              padding: EdgeInsets.fromLTRB(gutter, AppSpacing.sm, gutter, 0),
-              child: CenteredBar(
-                child: PrimaryButton(
-                  label: 'Share Invite',
-                  loading: _sharing,
-                  trailing: Icons.ios_share_rounded,
-                  onPressed: _sharing ? null : _shareTicket,
+                  ); // RepaintBoundary -> passContent
+
+            if (isTablet) {
+              return _TabletTicketBody(
+                passContent: passContent,
+                sharing: _sharing,
+                onShare: _sharing ? null : _shareTicket,
+                onDone: () => Navigator.of(context).popUntil((r) => r.isFirst),
+              );
+            }
+
+            // Original mobile layout — untouched.
+            return Column(
+              children: [
+                Expanded(
+                  child: CenteredFill(
+                    // The scroll view is OUTSIDE the boundary on purpose. If
+                    // the boundary wrapped the scrollable, toImage() would
+                    // only capture the visible viewport and the shared PNG
+                    // would be cut off. Wrapping the full-height Column
+                    // instead means the snapshot always contains the whole
+                    // pass, however tall it is.
+                    child: SingleChildScrollView(
+                      physics: const BouncingScrollPhysics(
+                        parent: AlwaysScrollableScrollPhysics(),
+                      ),
+                      child: passContent,
+                    ),
+                  ),
+                ),
+                // Share button — same look & feel as the "Done" button below.
+                // Kept outside the RepaintBoundary so it never appears in the shot.
+                Padding(
+                  padding: EdgeInsets.fromLTRB(gutter, AppSpacing.sm, gutter, 0),
+                  child: CenteredBar(
+                    child: PrimaryButton(
+                      label: 'Share Invite',
+                      loading: _sharing,
+                      trailing: Icons.ios_share_rounded,
+                      onPressed: _sharing ? null : _shareTicket,
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
+      ),
+      bottomNavigationBar: isTablet
+          ? null // Share + Done are combined into the tablet body itself.
+          : Container(
+              color: AppColors.ticketBg,
+              child: SafeArea(
+                top: false,
+                child: Padding(
+                  padding: EdgeInsets.fromLTRB(
+                    gutter,
+                    AppSpacing.md,
+                    gutter,
+                    AppSpacing.md,
+                  ),
+                  child: CenteredBar(
+                    child: PrimaryButton(
+                      label: 'Done',
+                      onPressed: () =>
+                          Navigator.of(context).popUntil((r) => r.isFirst),
+                    ),
+                  ),
                 ),
               ),
             ),
-          ],
-        ),
-      ),
-      bottomNavigationBar: Container(
-        color: AppColors.ticketBg,
-        child: SafeArea(
-          top: false,
-          child: Padding(
-            padding: EdgeInsets.fromLTRB(
-              gutter,
-              AppSpacing.md,
-              gutter,
-              AppSpacing.md,
-            ),
-            child: CenteredBar(
-              child: PrimaryButton(
-                label: 'Done',
-                onPressed: () =>
-                    Navigator.of(context).popUntil((r) => r.isFirst),
+    );
+  }
+}
+
+/// Tablet body — the pass card gets a visible frame (border + shadow) and
+/// sits centred on the page (both horizontally and vertically when it
+/// fits), with "Share Invite" and "Done" combined into one contained action
+/// area below it instead of a separate fixed bar plus a scroll-anchored
+/// button. The frame wraps [passContent] from OUTSIDE its RepaintBoundary,
+/// so the shared image itself is pixel-identical to what mobile shares.
+class _TabletTicketBody extends StatelessWidget {
+  const _TabletTicketBody({
+    required this.passContent,
+    required this.sharing,
+    required this.onShare,
+    required this.onDone,
+  });
+
+  final Widget passContent;
+  final bool sharing;
+  final VoidCallback? onShare;
+  final VoidCallback onDone;
+
+  @override
+  Widget build(BuildContext context) {
+    final gutter = AppSpacing.gutter(context);
+
+    // LayoutBuilder + a minHeight-matched ConstrainedBox centres the pass
+    // vertically when it fits the screen, while still scrolling normally if
+    // a long address/window text ever pushes it taller than the viewport.
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return SingleChildScrollView(
+          physics: const BouncingScrollPhysics(
+            parent: AlwaysScrollableScrollPhysics(),
+          ),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: constraints.maxHeight),
+            child: Center(
+              child: Padding(
+                padding: EdgeInsets.symmetric(
+                  vertical: AppSpacing.xxxl,
+                  horizontal: gutter,
+                ),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 480),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      DecoratedBox(
+                        decoration: BoxDecoration(
+                          borderRadius: AppRadii.cardShape,
+                          border: Border.all(color: AppColors.border),
+                          boxShadow: AppShadows.card,
+                        ),
+                        child: ClipRRect(
+                          borderRadius: AppRadii.cardShape,
+                          child: passContent,
+                        ),
+                      ),
+                      const SizedBox(height: AppSpacing.xl),
+                      PrimaryButton(
+                        label: 'Share Invite',
+                        loading: sharing,
+                        trailing: Icons.ios_share_rounded,
+                        onPressed: onShare,
+                      ),
+                      const SizedBox(height: AppSpacing.md),
+                      PrimaryButton(label: 'Done', onPressed: onDone),
+                    ],
+                  ),
+                ),
               ),
             ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 }

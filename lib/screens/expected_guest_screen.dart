@@ -11,6 +11,15 @@ import '../widgets/app_scaffold.dart';
 import '../widgets/pill_search_field.dart';
 import 'scan_visitor_screen.dart';
 
+/// Tablet breakpoint. Phones (< 600) always render the original, untouched
+/// single-column mobile list. Same convention as gate_log_screen.dart,
+/// invite_guest_list_screen.dart and month_guest_list_screen.dart.
+bool _isTablet(BuildContext context) => MediaQuery.sizeOf(context).width >= 600;
+
+/// Landscape / large tablets get a 3-column guest grid; portrait-ish
+/// tablets get 2.
+bool _isWideTablet(BuildContext context) => MediaQuery.sizeOf(context).width >= 900;
+
 /// Guard-side "Expected Guests" screen.
 ///
 /// Search + 4 stage filters (Expected / Check-in / Meeting / Check-out) + a
@@ -43,9 +52,13 @@ class _ExpectedGuestScreenState extends State<ExpectedGuestScreen> {
   }
 
   // Calls the API and maps the response into the UI model.
-  Future<void> _load() async {
+  //
+  /// [silent] keeps the current list on screen instead of swapping it for the
+  /// full-screen spinner — used when refreshing after the QR scanner checked
+  /// a guest in, so the list updates in place without a visible flash.
+  Future<void> _load({bool silent = false}) async {
     setState(() {
-      _loading = true;
+      _loading = !silent;
       _error = false;
     });
     try {
@@ -59,7 +72,10 @@ class _ExpectedGuestScreenState extends State<ExpectedGuestScreen> {
       if (!mounted) return;
       setState(() {
         _loading = false;
-        _error = true;
+        // A silent refresh keeps whatever is already on screen. Blanking the
+        // list for the full-screen error here would read as "the check-in
+        // failed" when in fact it succeeded and only this re-fetch didn't.
+        if (!silent) _error = true;
       });
     }
   }
@@ -271,6 +287,44 @@ class _ExpectedGuestScreenState extends State<ExpectedGuestScreen> {
   Widget build(BuildContext context) {
     final gutter = AppSpacing.gutter(context);
     final rows = _filtered;
+    final isTablet = _isTablet(context);
+
+    // The scanner checked a guest in on the server, so pull the list again
+    // to pick up their new stage / status / checked-in time. Silent, so the
+    // list updates in place instead of flashing the full-screen spinner.
+    void onScanCheckedIn() => _load(silent: true);
+
+    // Not arrived -> 4, Check-in -> 2, Check-out -> 3 — same handlers for
+    // every layout, just wired up once here.
+    Widget guestCard(ExpectedGuest g) => _GuestCard(
+      guest: g,
+      onNotArrived: () => _updateStatus(
+        g,
+        GuardStatus.notArrived,
+        stage: GuestStage.expected,
+      ),
+      onCheckIn: () =>
+          _updateStatus(g, GuardStatus.checkIn, stage: GuestStage.checkin),
+      onCheckOut: () =>
+          _updateStatus(g, GuardStatus.checkOut, stage: GuestStage.checkout),
+      onScanCheckedIn: onScanCheckedIn,
+    );
+
+    // Tablet-only card: same data and the exact same three handlers, just a
+    // single polished card instead of mobile's two-card stack.
+    Widget tabletGuestCard(ExpectedGuest g) => _TabletGuestCard(
+      guest: g,
+      onNotArrived: () => _updateStatus(
+        g,
+        GuardStatus.notArrived,
+        stage: GuestStage.expected,
+      ),
+      onCheckIn: () =>
+          _updateStatus(g, GuardStatus.checkIn, stage: GuestStage.checkin),
+      onCheckOut: () =>
+          _updateStatus(g, GuardStatus.checkOut, stage: GuestStage.checkout),
+      onScanCheckedIn: onScanCheckedIn,
+    );
 
     return Scaffold(
       backgroundColor: AppColors.canvas,
@@ -294,6 +348,55 @@ class _ExpectedGuestScreenState extends State<ExpectedGuestScreen> {
               )
             : _error
             ? _ErrorState(onRetry: _load)
+            : isTablet
+            ? Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 1120),
+                  child: Column(
+                    children: [
+                      Padding(
+                        padding: EdgeInsets.fromLTRB(
+                          gutter,
+                          AppSpacing.md,
+                          gutter,
+                          AppSpacing.lg,
+                        ),
+                        child: PillSearchField(
+                          controller: _search,
+                          hint: 'Search',
+                          onChanged: () => setState(() {}),
+                        ),
+                      ),
+
+                      // One row of 4 stage filter tiles — there's room for it
+                      // on a tablet, instead of a 2x2 square.
+                      Padding(
+                        padding: EdgeInsets.symmetric(horizontal: gutter),
+                        child: _StatGrid(
+                          expected: _expectedCount,
+                          checkin: _onPremisesCount,
+                          meeting: _onPremisesCount,
+                          checkout: _countOf(GuestStage.checkout),
+                          selected: _stageFilter,
+                          onTap: _toggleFilter,
+                          singleRow: true,
+                        ),
+                      ),
+                      const SizedBox(height: AppSpacing.lg),
+
+                      Expanded(
+                        child: rows.isEmpty
+                            ? const _Empty()
+                            : _ExpectedGuestGrid(
+                                rows: rows,
+                                gutter: gutter,
+                                cardBuilder: tabletGuestCard,
+                              ),
+                      ),
+                    ],
+                  ),
+                ),
+              )
             : CenteredFill(
                 child: Column(
                   children: [
@@ -345,29 +448,7 @@ class _ExpectedGuestScreenState extends State<ExpectedGuestScreen> {
                               // cards, so each pair still reads as one entry.
                               separatorBuilder: (_, __) =>
                                   const SizedBox(height: AppSpacing.xl),
-                              itemBuilder: (context, i) {
-                                final g = rows[i];
-                                return _GuestCard(
-                                  guest: g,
-                                  // Not arrived -> 4, Check-in -> 2,
-                                  // Check-out -> 3
-                                  onNotArrived: () => _updateStatus(
-                                    g,
-                                    GuardStatus.notArrived,
-                                    stage: GuestStage.expected,
-                                  ),
-                                  onCheckIn: () => _updateStatus(
-                                    g,
-                                    GuardStatus.checkIn,
-                                    stage: GuestStage.checkin,
-                                  ),
-                                  onCheckOut: () => _updateStatus(
-                                    g,
-                                    GuardStatus.checkOut,
-                                    stage: GuestStage.checkout,
-                                  ),
-                                );
-                              },
+                              itemBuilder: (context, i) => guestCard(rows[i]),
                             ),
                     ),
                   ],
@@ -387,6 +468,7 @@ class _StatGrid extends StatelessWidget {
     required this.checkout,
     required this.selected,
     required this.onTap,
+    this.singleRow = false,
   });
 
   final int expected;
@@ -395,6 +477,11 @@ class _StatGrid extends StatelessWidget {
   final int checkout;
   final GuestStage? selected;
   final ValueChanged<GuestStage> onTap;
+
+  /// Tablet-only: lay all 4 tiles out in one row instead of a 2x2 square,
+  /// since there's width to spare. Mobile always passes false (the default),
+  /// so its layout is untouched.
+  final bool singleRow;
 
   @override
   Widget build(BuildContext context) {
@@ -406,6 +493,20 @@ class _StatGrid extends StatelessWidget {
         onTap: () => onTap(stage),
       ),
     );
+
+    if (singleRow) {
+      return Row(
+        children: [
+          cell(GuestStage.expected, expected),
+          const SizedBox(width: AppSpacing.md),
+          cell(GuestStage.checkin, checkin),
+          const SizedBox(width: AppSpacing.md),
+          cell(GuestStage.meeting, meeting),
+          const SizedBox(width: AppSpacing.md),
+          cell(GuestStage.checkout, checkout),
+        ],
+      );
+    }
 
     return Column(
       children: [
@@ -498,6 +599,280 @@ class _StatBox extends StatelessWidget {
   }
 }
 
+/// Tablet grid — 2 columns on portrait/medium tablets, 3 on wide landscape,
+/// so the list actually uses the extra width instead of floating a single
+/// phone-width column in the middle of the screen. A Wrap of fixed-width
+/// items (not a fixed-extent GridView), since each [_GuestCard] is itself a
+/// two-card stack whose total height varies with content — same approach as
+/// the Gate Log / Invite Guest List / Month Guest List tablet grids.
+class _ExpectedGuestGrid extends StatelessWidget {
+  const _ExpectedGuestGrid({
+    required this.rows,
+    required this.gutter,
+    required this.cardBuilder,
+  });
+
+  final List<ExpectedGuest> rows;
+  final double gutter;
+  final Widget Function(ExpectedGuest) cardBuilder;
+
+  @override
+  Widget build(BuildContext context) {
+    final crossAxisCount = _isWideTablet(context) ? 3 : 2;
+    const spacing = AppSpacing.xl;
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final available = constraints.maxWidth - gutter * 2;
+        final cardWidth =
+            (available - spacing * (crossAxisCount - 1)) / crossAxisCount;
+
+        return SingleChildScrollView(
+          physics: const BouncingScrollPhysics(
+            parent: AlwaysScrollableScrollPhysics(),
+          ),
+          padding: EdgeInsets.fromLTRB(
+            gutter,
+            AppSpacing.xs,
+            gutter,
+            AppSpacing.xxl,
+          ),
+          child: Wrap(
+            spacing: spacing,
+            runSpacing: spacing,
+            children: [
+              for (final g in rows)
+                SizedBox(width: cardWidth, child: cardBuilder(g)),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// Tablet-only guest card — the same data and three flow actions as
+/// [_GuestCard], reassembled as one polished card (avatar, aligned meta
+/// rows, actions built in) instead of mobile's two stacked cards. No new
+/// fields, no new logic — [_updateStatus] and the API calls behind it are
+/// untouched; this only changes how the same data is presented on tablet.
+class _TabletGuestCard extends StatelessWidget {
+  const _TabletGuestCard({
+    required this.guest,
+    required this.onNotArrived,
+    required this.onCheckIn,
+    required this.onCheckOut,
+    required this.onScanCheckedIn,
+  });
+
+  final ExpectedGuest guest;
+  final VoidCallback onNotArrived;
+  final VoidCallback onCheckIn;
+  final VoidCallback onCheckOut;
+
+  /// Fired after the QR scanner's "Done" status API succeeded, so the list
+  /// can be refreshed.
+  final VoidCallback onScanCheckedIn;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context).textTheme;
+
+    return AppCard(
+      padding: const EdgeInsets.all(AppSpacing.xl),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // ---- Header: avatar, name (+N), scan icon ----
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _InitialsAvatar(name: guest.name),
+              const SizedBox(width: AppSpacing.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            guest.name,
+                            style: t.titleMedium?.copyWith(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w700,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (guest.plus > 0) ...[
+                          const SizedBox(width: AppSpacing.xs),
+                          Text(
+                            '+${guest.plus}',
+                            style: t.titleSmall?.copyWith(
+                              color: AppColors.brand,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      guest.when,
+                      style: t.bodySmall?.copyWith(color: AppColors.muted),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+              _ScanIconButton(onCheckedIn: onScanCheckedIn),
+            ],
+          ),
+
+          const SizedBox(height: AppSpacing.lg),
+          const Divider(height: 1, color: AppColors.borderSoft),
+          const SizedBox(height: AppSpacing.md),
+
+          // ---- Aligned meta rows — same 7 fields as the mobile card ----
+          _TabletMetaLine(
+            label: 'Requested By',
+            value: guest.requestedBy.isEmpty ? '—' : guest.requestedBy,
+          ),
+          _TabletMetaLine(label: 'Date / Time', value: guest.when),
+          _TabletMetaLine(label: 'Duration', value: guest.duration),
+          _TabletMetaLine(label: 'Note', value: guest.note),
+          _TabletMetaLine(label: 'Status', value: guest.statusText),
+          _TabletMetaLine(
+            label: 'Checked In',
+            value: guest.checkedIn.isEmpty ? '—' : guest.checkedIn,
+          ),
+          _TabletMetaLine(
+            label: 'Checked Out',
+            value: guest.checkedOut.isEmpty ? '—' : guest.checkedOut,
+          ),
+
+          const SizedBox(height: AppSpacing.lg),
+
+          // ---- The three flow actions, built into the same card ----
+          Row(
+            children: [
+              Expanded(
+                child: _ActBtn(
+                  label: 'Not arrived',
+                  active: guest.stage == GuestStage.expected,
+                  onTap: onNotArrived,
+                ),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: _ActBtn(
+                  label: 'Check-in',
+                  active:
+                      guest.stage == GuestStage.checkin ||
+                      guest.stage == GuestStage.meeting,
+                  onTap: onCheckIn,
+                ),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: _ActBtn(
+                  label: 'Check-out',
+                  active: guest.stage == GuestStage.checkout,
+                  onTap: onCheckOut,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Brand-tinted initials circle, matching the avatar language already used
+/// on the dashboard and Select Guests screens.
+class _InitialsAvatar extends StatelessWidget {
+  const _InitialsAvatar({required this.name});
+
+  final String name;
+
+  String get _initials {
+    final parts = name
+        .trim()
+        .split(RegExp(r'\s+'))
+        .where((p) => p.isNotEmpty)
+        .toList();
+    if (parts.isEmpty) return '?';
+    if (parts.length == 1) return parts.first[0].toUpperCase();
+    return (parts.first[0] + parts.last[0]).toUpperCase();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 46,
+      height: 46,
+      decoration: const BoxDecoration(
+        color: AppColors.brandTint,
+        shape: BoxShape.circle,
+      ),
+      alignment: Alignment.center,
+      child: Text(
+        _initials,
+        style: Theme.of(context).textTheme.titleSmall?.copyWith(
+          color: AppColors.brand,
+          fontSize: 15,
+        ),
+      ),
+    );
+  }
+}
+
+/// Aligned "Label : value" row for the tablet guest card — same idea as the
+/// _LogRow used on the Gate Log / Month / Yesterday tablet cards, so every
+/// colon lines up regardless of label length.
+class _TabletMetaLine extends StatelessWidget {
+  const _TabletMetaLine({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  static const double _labelWidth = 104;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context).textTheme;
+    final labelStyle = t.bodySmall?.copyWith(color: AppColors.faint);
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 5),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(width: _labelWidth, child: Text(label, style: labelStyle)),
+          Text(':', style: labelStyle),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: Text(
+              value,
+              style: t.bodySmall?.copyWith(
+                color: AppColors.inkSoft,
+                fontWeight: FontWeight.w600,
+              ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 /// A single guest card with the three flow-action buttons.
 class _GuestCard extends StatelessWidget {
   const _GuestCard({
@@ -505,12 +880,17 @@ class _GuestCard extends StatelessWidget {
     required this.onNotArrived,
     required this.onCheckIn,
     required this.onCheckOut,
+    required this.onScanCheckedIn,
   });
 
   final ExpectedGuest guest;
   final VoidCallback onNotArrived; // iStatus 4
   final VoidCallback onCheckIn; // iStatus 2
   final VoidCallback onCheckOut; // iStatus 3
+
+  /// Fired after the QR scanner's "Done" status API succeeded, so the list
+  /// can be refreshed.
+  final VoidCallback onScanCheckedIn;
 
   @override
   Widget build(BuildContext context) {
@@ -585,7 +965,7 @@ class _GuestCard extends StatelessWidget {
               ),
               const SizedBox(width: AppSpacing.sm),
               // Right lane — scan icon, 5dp off the card edge.
-              const _ScanIconButton(),
+              _ScanIconButton(onCheckedIn: onScanCheckedIn),
             ],
           ),
         ),
@@ -665,7 +1045,11 @@ class _MetaLine extends StatelessWidget {
 /// camera to scan a visitor's QR/barcode pass, just placed on the card here
 /// instead of the AppBar.
 class _ScanIconButton extends StatelessWidget {
-  const _ScanIconButton();
+  const _ScanIconButton({required this.onCheckedIn});
+
+  /// Called when the scanner popped after its "Done" status API succeeded,
+  /// so this screen can pull the list again and show the new stage/status.
+  final VoidCallback onCheckedIn;
 
   @override
   Widget build(BuildContext context) {
@@ -681,9 +1065,15 @@ class _ScanIconButton extends StatelessWidget {
       // Keeps the glyph at least 25dp on every side without the default
       // 48dp IconButton box pushing the card wider.
       constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
-      onPressed: () => Navigator.of(context).push(
-        MaterialPageRoute<void>(builder: (_) => const ScanVisitorScreen()),
-      ),
+      onPressed: () async {
+        // ScanVisitorScreen pops `true` only after its check-in API replied
+        // Result == "1"; anything else (plain back, failed call) leaves the
+        // list alone.
+        final checkedIn = await Navigator.of(context).push<bool>(
+          MaterialPageRoute<bool>(builder: (_) => const ScanVisitorScreen()),
+        );
+        if (checkedIn == true && context.mounted) onCheckedIn();
+      },
     );
   }
 }

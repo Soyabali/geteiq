@@ -8,6 +8,14 @@ import '../widgets/app_card.dart';
 import '../widgets/app_scaffold.dart';
 import '../widgets/pill_search_field.dart';
 
+/// Tablet breakpoint. Phones (< 600) always render the original, untouched
+/// single-column mobile list. Same convention as gate_log_screen.dart and
+/// invite_guest_list_screen.dart.
+bool _isTablet(BuildContext context) => MediaQuery.sizeOf(context).width >= 600;
+
+/// Landscape / large tablets get a 3-column grid; portrait-ish tablets get 2.
+bool _isWideTablet(BuildContext context) => MediaQuery.sizeOf(context).width >= 900;
+
 /// "Month guest list" — every guard visitor request from the current month.
 ///
 /// Read-only history, same layout as [YesterdayGuestListScreen]: no approve
@@ -149,6 +157,7 @@ class _MonthGuestListScreenState extends State<MonthGuestListScreen> {
   Widget build(BuildContext context) {
     final gutter = AppSpacing.gutter(context);
     final rows = _filtered;
+    final isTablet = _isTablet(context);
 
     return Scaffold(
       backgroundColor: AppColors.canvas,
@@ -172,6 +181,48 @@ class _MonthGuestListScreenState extends State<MonthGuestListScreen> {
               )
             : _error
             ? _ErrorState(onRetry: _load)
+            : isTablet
+            ? Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 1120),
+                  child: Column(
+                    children: [
+                      Padding(
+                        padding: EdgeInsets.fromLTRB(
+                          gutter,
+                          AppSpacing.md,
+                          gutter,
+                          AppSpacing.md,
+                        ),
+                        child: _DateRangeCard(
+                          fromLabel: _dateFmt.format(_fromDate),
+                          toLabel: _dateFmt.format(_toDate),
+                          onTapFrom: _pickFromDate,
+                          onTapTo: _pickToDate,
+                        ),
+                      ),
+                      Padding(
+                        padding: EdgeInsets.fromLTRB(
+                          gutter,
+                          0,
+                          gutter,
+                          AppSpacing.lg,
+                        ),
+                        child: PillSearchField(
+                          controller: _search,
+                          hint: "Search this month's guests",
+                          onChanged: () => setState(() {}),
+                        ),
+                      ),
+                      Expanded(
+                        child: rows.isEmpty
+                            ? const _Empty()
+                            : _MonthGuestGrid(rows: rows, gutter: gutter),
+                      ),
+                    ],
+                  ),
+                ),
+              )
             : CenteredFill(
                 child: Column(
                   children: [
@@ -365,6 +416,52 @@ class _DateCell extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Tablet grid — 2 columns on portrait/medium tablets, 3 on wide landscape,
+/// so the list actually uses the extra width instead of floating a single
+/// phone-width column in the middle of the screen. A Wrap of fixed-width
+/// cards (not a fixed-extent GridView), so each card keeps its own natural
+/// height — same approach as the Gate Log / Invite Guest List tablet grids.
+class _MonthGuestGrid extends StatelessWidget {
+  const _MonthGuestGrid({required this.rows, required this.gutter});
+
+  final List<GuardVisitor> rows;
+  final double gutter;
+
+  @override
+  Widget build(BuildContext context) {
+    final crossAxisCount = _isWideTablet(context) ? 3 : 2;
+    const spacing = AppSpacing.md;
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final available = constraints.maxWidth - gutter * 2;
+        final cardWidth =
+            (available - spacing * (crossAxisCount - 1)) / crossAxisCount;
+
+        return SingleChildScrollView(
+          physics: const BouncingScrollPhysics(
+            parent: AlwaysScrollableScrollPhysics(),
+          ),
+          padding: EdgeInsets.fromLTRB(
+            gutter,
+            AppSpacing.xs,
+            gutter,
+            AppSpacing.xxl,
+          ),
+          child: Wrap(
+            spacing: spacing,
+            runSpacing: spacing,
+            children: [
+              for (final v in rows)
+                SizedBox(width: cardWidth, child: _MonthGuestCard(visitor: v)),
+            ],
+          ),
+        );
+      },
     );
   }
 }

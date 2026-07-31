@@ -10,6 +10,14 @@ import '../widgets/app_card.dart';
 import '../widgets/app_scaffold.dart';
 import 'invite_details_screen.dart';
 
+/// Tablet breakpoint. Phones (< 600) always render the original,
+/// untouched mobile layout.
+bool _isTablet(BuildContext context) => MediaQuery.sizeOf(context).width >= 600;
+
+/// Landscape / large tablets get a two-pane layout with a persistent
+/// "Selected Guests" panel; portrait-ish tablets stay single-column.
+bool _isWideTablet(BuildContext context) => MediaQuery.sizeOf(context).width >= 900;
+
 /// Screen 6 — build the guest list from contacts, recents, or manual entry.
 class SelectGuestsScreen extends StatefulWidget {
   const SelectGuestsScreen({super.key, required this.invite});
@@ -113,6 +121,26 @@ class _SelectGuestsScreenState extends State<SelectGuestsScreen>
   @override
   Widget build(BuildContext context) {
     final gutter = AppSpacing.gutter(context);
+    final isTablet = _isTablet(context);
+    final isWide = _isWideTablet(context);
+
+    final contactsTab = _ContactsTab(
+      search: _search,
+      contacts: _filteredContacts,
+      isSelected: _isSelected,
+      onToggle: _toggle,
+      onSearchChanged: () => setState(() {}),
+      loading: _loadingContacts,
+      permissionDenied: _permissionDenied,
+      onRetry: _loadContacts,
+      gutter: gutter,
+    );
+    final recentTab = _RecentTab(
+      isSelected: _isSelected,
+      onToggle: _toggle,
+      gutter: gutter,
+    );
+    final manualTab = _ManualTab(onAdd: _addManual, gutter: gutter);
 
     // Tap anywhere on the screen (outside a text field) -> hide the keyboard.
     return GestureDetector(
@@ -121,76 +149,75 @@ class _SelectGuestsScreenState extends State<SelectGuestsScreen>
       child: Scaffold(
         backgroundColor: AppColors.canvas,
         appBar: AppBar(
-          titleSpacing: gutter,
-          leadingWidth: gutter + 32,
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
-            onPressed: () => Navigator.of(context).maybePop(),
+          toolbarHeight: isTablet ? 72 : kToolbarHeight,
+          centerTitle: isTablet,
+          titleSpacing: isTablet ? 0 : gutter,
+          leadingWidth: isTablet ? gutter + 52 : gutter + 32,
+          leading: isTablet
+              ? Padding(
+                  padding: EdgeInsets.only(left: gutter),
+                  child: _TabletBackButton(
+                    onTap: () => Navigator.of(context).maybePop(),
+                  ),
+                )
+              : IconButton(
+                  icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
+                  onPressed: () => Navigator.of(context).maybePop(),
+                ),
+          title: Text(
+            'Select Guests',
+            style: isTablet
+                ? Theme.of(
+                    context,
+                  ).textTheme.headlineSmall?.copyWith(fontSize: 24)
+                : null,
           ),
-          title: const Text('Select Guests'),
           bottom: PreferredSize(
-            preferredSize: const Size.fromHeight(48),
+            preferredSize: Size.fromHeight(isTablet ? 56 : 48),
             child: Padding(
               padding: EdgeInsets.symmetric(horizontal: gutter),
-              child: TabBar(
-                controller: _tabs,
-                isScrollable: true,
-                tabAlignment: TabAlignment.start,
-                indicatorColor: AppColors.brand,
-                indicatorWeight: 3,
-                indicatorSize: TabBarIndicatorSize.label,
-                labelColor: AppColors.ink,
-                unselectedLabelColor: AppColors.faint,
-                dividerColor: Colors.transparent,
-                labelStyle: Theme.of(context).textTheme.titleMedium,
-                unselectedLabelStyle: Theme.of(context).textTheme.titleMedium,
-                tabs: const [
-                  Tab(text: 'Contacts'),
-                  Tab(text: 'Recent'),
-                  Tab(text: 'Add Manually'),
-                ],
-              ),
+              child: isTablet
+                  ? Center(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 640),
+                        child: _buildTabBar(context, tablet: true),
+                      ),
+                    )
+                  : _buildTabBar(context, tablet: false),
             ),
           ),
         ),
         body: SafeArea(
           bottom: false,
-          child: CenteredFill(
-            child: Column(
-              children: [
-                if (_selected.isNotEmpty)
-                  _SelectedChips(
-                    guests: _selected,
-                    gutter: gutter,
-                    onRemove: _toggle,
-                  ),
-                Expanded(
-                  child: TabBarView(
-                    controller: _tabs,
+          child: isTablet
+              ? _TabletBody(
+                  isWide: isWide,
+                  gutter: gutter,
+                  selected: _selected,
+                  onRemove: _toggle,
+                  contactsTab: contactsTab,
+                  recentTab: recentTab,
+                  manualTab: manualTab,
+                  tabController: _tabs,
+                )
+              : CenteredFill(
+                  child: Column(
                     children: [
-                      _ContactsTab(
-                        search: _search,
-                        contacts: _filteredContacts,
-                        isSelected: _isSelected,
-                        onToggle: _toggle,
-                        onSearchChanged: () => setState(() {}),
-                        loading: _loadingContacts,
-                        permissionDenied: _permissionDenied,
-                        onRetry: _loadContacts,
-                        gutter: gutter,
+                      if (_selected.isNotEmpty)
+                        _SelectedChips(
+                          guests: _selected,
+                          gutter: gutter,
+                          onRemove: _toggle,
+                        ),
+                      Expanded(
+                        child: TabBarView(
+                          controller: _tabs,
+                          children: [contactsTab, recentTab, manualTab],
+                        ),
                       ),
-                      _RecentTab(
-                        isSelected: _isSelected,
-                        onToggle: _toggle,
-                        gutter: gutter,
-                      ),
-                      _ManualTab(onAdd: _addManual, gutter: gutter),
                     ],
                   ),
                 ),
-              ],
-            ),
-          ),
         ),
         bottomNavigationBar: Container(
           color: AppColors.canvas,
@@ -204,6 +231,7 @@ class _SelectGuestsScreenState extends State<SelectGuestsScreen>
                 AppSpacing.md,
               ),
               child: CenteredBar(
+                maxWidth: isTablet ? 480 : AppSpacing.maxContentWidth,
                 child: PrimaryButton(
                   label: _selected.isEmpty
                       ? 'Next'
@@ -218,6 +246,258 @@ class _SelectGuestsScreenState extends State<SelectGuestsScreen>
       ),
     );
   }
+
+  /// [tablet] adds an icon above each label and centers the bar instead of
+  /// the mobile left-aligned strip. Labels are unchanged either way.
+  ///
+  /// Stays `isScrollable` on tablet too: the icons plus the longest label
+  /// ("Add Manually") exceed the capped bar width at large OS text scales,
+  /// and a fixed bar can't shrink, so it would overflow. Scrollable +
+  /// [TabAlignment.center] still centres the tabs whenever they fit, and
+  /// degrades to a scroll instead of an overflow when they don't.
+  Widget _buildTabBar(BuildContext context, {required bool tablet}) {
+    final baseStyle = Theme.of(context).textTheme.titleMedium;
+    final labelStyle = tablet ? baseStyle?.copyWith(fontSize: 16) : baseStyle;
+
+    return TabBar(
+      controller: _tabs,
+      isScrollable: true,
+      tabAlignment: tablet ? TabAlignment.center : TabAlignment.start,
+      indicatorColor: AppColors.brand,
+      indicatorWeight: 3,
+      indicatorSize: TabBarIndicatorSize.label,
+      labelColor: AppColors.ink,
+      unselectedLabelColor: AppColors.faint,
+      dividerColor: Colors.transparent,
+      labelStyle: labelStyle,
+      unselectedLabelStyle: labelStyle,
+      tabs: tablet
+          ? const [
+              Tab(icon: Icon(Icons.contacts_rounded, size: 20), text: 'Contacts'),
+              Tab(icon: Icon(Icons.history_rounded, size: 20), text: 'Recent'),
+              Tab(
+                icon: Icon(Icons.person_add_alt_1_rounded, size: 20),
+                text: 'Add Manually',
+              ),
+            ]
+          : const [
+              Tab(text: 'Contacts'),
+              Tab(text: 'Recent'),
+              Tab(text: 'Add Manually'),
+            ],
+    );
+  }
+}
+
+/// Plain back button for the tablet app bar — same chevron as mobile, just
+/// sized for the taller tablet toolbar. No circle/background decoration.
+class _TabletBackButton extends StatelessWidget {
+  const _TabletBackButton({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 22),
+      onPressed: onTap,
+    );
+  }
+}
+
+/// Tablet body shell. Portrait / medium tablets get a single, wider column
+/// (chips strip kept, just roomier). Wide landscape tablets get a two-pane
+/// layout: tabs on the left, a persistent Selected Guests panel on the right
+/// instead of a horizontal chip strip.
+class _TabletBody extends StatelessWidget {
+  const _TabletBody({
+    required this.isWide,
+    required this.gutter,
+    required this.selected,
+    required this.onRemove,
+    required this.contactsTab,
+    required this.recentTab,
+    required this.manualTab,
+    required this.tabController,
+  });
+
+  final bool isWide;
+  final double gutter;
+  final List<Guest> selected;
+  final ValueChanged<Guest> onRemove;
+  final Widget contactsTab;
+  final Widget recentTab;
+  final Widget manualTab;
+  final TabController tabController;
+
+  @override
+  Widget build(BuildContext context) {
+    final tabView = TabBarView(
+      controller: tabController,
+      children: [contactsTab, recentTab, manualTab],
+    );
+
+    if (isWide) {
+      return Padding(
+        padding: EdgeInsets.fromLTRB(gutter, AppSpacing.lg, gutter, 0),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 1120),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(flex: 3, child: tabView),
+                const SizedBox(width: AppSpacing.xxl),
+                Expanded(
+                  flex: 2,
+                  child: _SelectedGuestsPanel(
+                    guests: selected,
+                    onRemove: onRemove,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 760),
+        child: Column(
+          children: [
+            if (selected.isNotEmpty)
+              _SelectedChips(
+                guests: selected,
+                gutter: gutter,
+                onRemove: onRemove,
+                tablet: true,
+              ),
+            Expanded(child: tabView),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Persistent selected-guests list for wide tablets — replaces the mobile
+/// horizontal chip strip with a proper scrollable panel now that there's
+/// room for one. Same [selected] state and [onRemove] callback as mobile.
+class _SelectedGuestsPanel extends StatelessWidget {
+  const _SelectedGuestsPanel({required this.guests, required this.onRemove});
+
+  final List<Guest> guests;
+  final ValueChanged<Guest> onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context).textTheme;
+
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.xl),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: AppRadii.cardShape,
+        border: Border.all(color: AppColors.borderSoft),
+        boxShadow: AppShadows.card,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(child: Text('Selected Guests', style: t.titleMedium)),
+              if (guests.isNotEmpty)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppColors.brandTint,
+                    borderRadius: BorderRadius.circular(AppRadii.pill),
+                  ),
+                  child: Text(
+                    '${guests.length}',
+                    style: t.labelMedium?.copyWith(color: AppColors.brand),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.lg),
+          Expanded(
+            child: guests.isEmpty
+                ? Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(AppSpacing.lg),
+                      child: Text(
+                        'No guests selected yet.\nPick from Contacts, Recent, or add manually.',
+                        textAlign: TextAlign.center,
+                        style: t.bodySmall,
+                      ),
+                    ),
+                  )
+                : ListView.separated(
+                    itemCount: guests.length,
+                    separatorBuilder: (_, __) =>
+                        const SizedBox(height: AppSpacing.sm),
+                    itemBuilder: (context, i) {
+                      final g = guests[i];
+                      return Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: AppSpacing.md,
+                          vertical: AppSpacing.sm,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColors.canvas,
+                          borderRadius: BorderRadius.circular(AppRadii.md),
+                        ),
+                        child: Row(
+                          children: [
+                            _Avatar(initials: g.initials, active: true),
+                            const SizedBox(width: AppSpacing.md),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    g.name,
+                                    style: t.titleSmall,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  Text(
+                                    g.phone,
+                                    style: t.bodySmall,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ],
+                              ),
+                            ),
+                            IconButton(
+                              icon: const Icon(
+                                Icons.close_rounded,
+                                size: 18,
+                                color: AppColors.faint,
+                              ),
+                              onPressed: () => onRemove(g),
+                              visualDensity: VisualDensity.compact,
+                              tooltip: 'Remove',
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 /// Horizontal strip of chosen guests, each removable.
@@ -226,16 +506,18 @@ class _SelectedChips extends StatelessWidget {
     required this.guests,
     required this.gutter,
     required this.onRemove,
+    this.tablet = false,
   });
 
   final List<Guest> guests;
   final double gutter;
   final ValueChanged<Guest> onRemove;
+  final bool tablet;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 56,
+      height: tablet ? 68 : 56,
       alignment: Alignment.centerLeft,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
@@ -246,13 +528,20 @@ class _SelectedChips extends StatelessWidget {
           final g = guests[i];
           return Chip(
             label: Text(g.name, overflow: TextOverflow.ellipsis),
-            labelStyle: Theme.of(context).textTheme.titleSmall,
+            labelStyle: tablet
+                ? Theme.of(
+                    context,
+                  ).textTheme.titleSmall?.copyWith(fontSize: 15)
+                : Theme.of(context).textTheme.titleSmall,
+            labelPadding: tablet
+                ? const EdgeInsets.symmetric(horizontal: 4)
+                : null,
             backgroundColor: AppColors.surface,
             side: const BorderSide(color: AppColors.border),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(AppRadii.pill),
             ),
-            deleteIcon: const Icon(Icons.close_rounded, size: 17),
+            deleteIcon: Icon(Icons.close_rounded, size: tablet ? 19 : 17),
             onDeleted: () => onRemove(g),
           );
         },
@@ -286,6 +575,8 @@ class _ContactsTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isTablet = _isTablet(context);
+
     // Still reading the phone contacts -> show a spinner.
     if (loading) {
       return const Center(
@@ -312,10 +603,15 @@ class _ContactsTab extends StatelessWidget {
             controller: search,
             onChanged: (_) => onSearchChanged(),
             textInputAction: TextInputAction.search,
-            decoration: const InputDecoration(
+            decoration: InputDecoration(
               hintText: 'Search from contacts',
-              prefixIcon: Icon(Icons.search_rounded, color: AppColors.faint),
-              contentPadding: EdgeInsets.symmetric(vertical: 14),
+              prefixIcon: const Icon(
+                Icons.search_rounded,
+                color: AppColors.faint,
+              ),
+              contentPadding: EdgeInsets.symmetric(
+                vertical: isTablet ? 18 : 14,
+              ),
             ),
           ),
         ),
@@ -417,49 +713,107 @@ class _ManualTabState extends State<_ManualTab> {
       ..showSnackBar(const SnackBar(content: Text('Guest added')));
   }
 
+  Widget _nameField() => TextFormField(
+    controller: _name,
+    textCapitalization: TextCapitalization.words,
+    textInputAction: TextInputAction.next,
+    decoration: const InputDecoration(labelText: 'Guest Name'),
+    validator: (v) =>
+        (v == null || v.trim().isEmpty) ? 'Enter a name' : null,
+  );
+
+  Widget _phoneField() => TextFormField(
+    controller: _phone,
+    keyboardType: TextInputType.phone,
+    textInputAction: TextInputAction.done,
+    onFieldSubmitted: (_) => _submit(),
+    inputFormatters: [
+      FilteringTextInputFormatter.digitsOnly,
+      LengthLimitingTextInputFormatter(10),
+    ],
+    decoration: const InputDecoration(
+      labelText: 'Mobile Number',
+      prefixText: '+91  ',
+    ),
+    validator: (v) =>
+        (v == null || v.trim().length != 10) ? 'Enter a 10-digit number' : null,
+  );
+
   @override
   Widget build(BuildContext context) {
+    if (!_isTablet(context)) {
+      // Original mobile layout — untouched.
+      return SingleChildScrollView(
+        padding: EdgeInsets.fromLTRB(
+          widget.gutter,
+          AppSpacing.xl,
+          widget.gutter,
+          AppSpacing.xxl,
+        ),
+        child: Form(
+          key: _formKey,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _nameField(),
+              const SizedBox(height: AppSpacing.lg),
+              _phoneField(),
+              const SizedBox(height: AppSpacing.xxl),
+              PrimaryButton(label: 'Add Guest', onPressed: _submit),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // Tablet: fields side-by-side inside a centred, framed card.
     return SingleChildScrollView(
       padding: EdgeInsets.fromLTRB(
         widget.gutter,
-        AppSpacing.xl,
+        AppSpacing.xxl,
         widget.gutter,
         AppSpacing.xxl,
       ),
-      child: Form(
-        key: _formKey,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            TextFormField(
-              controller: _name,
-              textCapitalization: TextCapitalization.words,
-              textInputAction: TextInputAction.next,
-              decoration: const InputDecoration(labelText: 'Guest Name'),
-              validator: (v) =>
-                  (v == null || v.trim().isEmpty) ? 'Enter a name' : null,
-            ),
-            const SizedBox(height: AppSpacing.lg),
-            TextFormField(
-              controller: _phone,
-              keyboardType: TextInputType.phone,
-              textInputAction: TextInputAction.done,
-              onFieldSubmitted: (_) => _submit(),
-              inputFormatters: [
-                FilteringTextInputFormatter.digitsOnly,
-                LengthLimitingTextInputFormatter(10),
-              ],
-              decoration: const InputDecoration(
-                labelText: 'Mobile Number',
-                prefixText: '+91  ',
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 640),
+          child: Form(
+            key: _formKey,
+            child: Container(
+              padding: const EdgeInsets.all(AppSpacing.xxl),
+              decoration: BoxDecoration(
+                color: AppColors.surface,
+                borderRadius: AppRadii.cardShape,
+                border: Border.all(color: AppColors.borderSoft),
+                boxShadow: AppShadows.card,
               ),
-              validator: (v) => (v == null || v.trim().length != 10)
-                  ? 'Enter a 10-digit number'
-                  : null,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    'Guest Details',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                  const SizedBox(height: AppSpacing.xs),
+                  Text(
+                    "Add someone who isn't in your contacts.",
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                  const SizedBox(height: AppSpacing.xl),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(child: _nameField()),
+                      const SizedBox(width: AppSpacing.lg),
+                      Expanded(child: _phoneField()),
+                    ],
+                  ),
+                  const SizedBox(height: AppSpacing.xxl),
+                  PrimaryButton(label: 'Add Guest', onPressed: _submit),
+                ],
+              ),
             ),
-            const SizedBox(height: AppSpacing.xxl),
-            PrimaryButton(label: 'Add Guest', onPressed: _submit),
-          ],
+          ),
         ),
       ),
     );
@@ -467,7 +821,7 @@ class _ManualTabState extends State<_ManualTab> {
 }
 
 class _GuestRow extends StatelessWidget {
-  const  _GuestRow({
+  const _GuestRow({
     required this.guest,
     required this.selected,
     required this.onTap,
@@ -480,19 +834,24 @@ class _GuestRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context).textTheme;
+    final isTablet = _isTablet(context);
 
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpacing.md),
       child: AppCard(
         onTap: onTap,
-        padding: const EdgeInsets.symmetric(
+        padding: EdgeInsets.symmetric(
           horizontal: AppSpacing.lg,
-          vertical: AppSpacing.md,
+          vertical: isTablet ? AppSpacing.lg : AppSpacing.md,
         ),
         radius: AppRadii.lg,
         child: Row(
           children: [
-            _Avatar(initials: guest.initials, active: selected),
+            _Avatar(
+              initials: guest.initials,
+              active: selected,
+              size: isTablet ? 50 : 42,
+            ),
             const SizedBox(width: AppSpacing.md),
             Expanded(
               child: Column(
@@ -501,14 +860,18 @@ class _GuestRow extends StatelessWidget {
                 children: [
                   Text(
                     guest.name,
-                    style: t.titleMedium,
+                    style: isTablet
+                        ? t.titleMedium?.copyWith(fontSize: 17)
+                        : t.titleMedium,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 2),
                   Text(
                     guest.phone,
-                    style: t.bodySmall,
+                    style: isTablet
+                        ? t.bodySmall?.copyWith(fontSize: 14)
+                        : t.bodySmall,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -518,8 +881,8 @@ class _GuestRow extends StatelessWidget {
             const SizedBox(width: AppSpacing.sm),
             AnimatedContainer(
               duration: const Duration(milliseconds: 180),
-              width: 24,
-              height: 24,
+              width: isTablet ? 28 : 24,
+              height: isTablet ? 28 : 24,
               decoration: BoxDecoration(
                 color: selected ? AppColors.brand : Colors.transparent,
                 shape: BoxShape.circle,
@@ -529,9 +892,9 @@ class _GuestRow extends StatelessWidget {
                 ),
               ),
               child: selected
-                  ? const Icon(
+                  ? Icon(
                       Icons.check_rounded,
-                      size: 16,
+                      size: isTablet ? 18 : 16,
                       color: Colors.white,
                     )
                   : null,
@@ -544,16 +907,17 @@ class _GuestRow extends StatelessWidget {
 }
 
 class _Avatar extends StatelessWidget {
-  const _Avatar({required this.initials, this.active = false});
+  const _Avatar({required this.initials, this.active = false, this.size = 42});
 
   final String initials;
   final bool active;
+  final double size;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 42,
-      height: 42,
+      width: size,
+      height: size,
       decoration: BoxDecoration(
         color: active ? AppColors.brand : AppColors.brandTint,
         shape: BoxShape.circle,
@@ -563,7 +927,7 @@ class _Avatar extends StatelessWidget {
         initials,
         style: Theme.of(context).textTheme.titleSmall?.copyWith(
           color: active ? Colors.white : AppColors.brand,
-          fontSize: 14,
+          fontSize: size >= 48 ? 15 : 14,
         ),
       ),
     );

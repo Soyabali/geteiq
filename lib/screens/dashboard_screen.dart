@@ -1,5 +1,6 @@
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
+import 'package:lottie/lottie.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/invite.dart';
 import '../services/vmsUpdateVisitorGsmid.dart';
@@ -23,8 +24,28 @@ import 'yesterday_guest_list_screen.dart';
 /// "Add Guest" action that starts the invite flow.
 ///
 
+/// Tablet breakpoint. Phones (< 600) always render [_MobileDashboardBody],
+/// the original, untouched mobile layout.
+bool _isTablet(BuildContext context) => MediaQuery.sizeOf(context).width >= 600;
+
+/// Landscape / large tablets get a two-pane layout; portrait-ish tablets
+/// stay single-column so the 2x2 grid never feels cramped.
+bool _isWideTablet(BuildContext context) => MediaQuery.sizeOf(context).width >= 900;
+
 class DashboardScreen extends StatelessWidget {
   const DashboardScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return _isTablet(context)
+        ? const _TabletDashboardBody()
+        : const _MobileDashboardBody();
+  }
+}
+
+/// Original phone layout — untouched.
+class _MobileDashboardBody extends StatelessWidget {
+  const _MobileDashboardBody();
 
   @override
   Widget build(BuildContext context) {
@@ -67,6 +88,159 @@ class DashboardScreen extends StatelessWidget {
         ),
       ),
       bottomNavigationBar: _AddGuestBar(gutter: gutter),
+    );
+  }
+}
+
+/// Tablet-only layout — a real dashboard, not a stretched phone screen.
+///
+/// Portrait / medium tablets: single centred column with a framed carousel
+/// and a clean 2x2 stat-card grid. Wide landscape tablets get a second pane
+/// alongside the grid so the extra width is used deliberately instead of
+/// stretching the cards into empty space.
+class _TabletDashboardBody extends StatelessWidget {
+  const _TabletDashboardBody();
+
+  @override
+  Widget build(BuildContext context) {
+    final gutter = AppSpacing.gutter(context);
+    final wide = _isWideTablet(context);
+
+    return Scaffold(
+      backgroundColor: AppColors.canvas,
+      body: SafeArea(
+        bottom: false,
+        child: SingleChildScrollView(
+          physics: const BouncingScrollPhysics(
+            parent: AlwaysScrollableScrollPhysics(),
+          ),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 1120),
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(
+                  gutter,
+                  AppSpacing.lg,
+                  gutter,
+                  AppSpacing.xxxl,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const _DashboardHeader(),
+                    const SizedBox(height: AppSpacing.xxl),
+                    if (wide)
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: const [
+                          Expanded(flex: 3, child: _TabletMainColumn()),
+                          SizedBox(width: AppSpacing.xxxl),
+                          Expanded(flex: 2, child: _VisitorGreetingPanel()),
+                        ],
+                      )
+                    else
+                      // Portrait tablets don't have side-by-side room, but the
+                      // grid still leaves real vertical space below it — use
+                      // it deliberately instead of leaving blank canvas.
+                      const Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          _TabletMainColumn(),
+                          SizedBox(height: AppSpacing.xxl),
+                          _VisitorGreetingPanel(),
+                        ],
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+      bottomNavigationBar: const _TabletAddGuestBar(),
+    );
+  }
+}
+
+/// Carousel + action grid, shared by both single-column and two-pane
+/// tablet layouts.
+class _TabletMainColumn extends StatelessWidget {
+  const _TabletMainColumn();
+
+  @override
+  Widget build(BuildContext context) {
+    final height = _isWideTablet(context) ? 260.0 : 210.0;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // Framed / elevated so the carousel reads as a deliberate hero
+        // card rather than a bare, floating image.
+        DecoratedBox(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(AppRadii.xl),
+            boxShadow: AppShadows.card,
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(AppRadii.xl),
+            child: CompanyCarousel(height: height),
+          ),
+        ),
+        const SizedBox(height: AppSpacing.xxl),
+        const _TabletActionsGrid(),
+      ],
+    );
+  }
+}
+
+/// Warm, illustrative panel for wide tablets — fills the space a 2x2 grid
+/// would otherwise leave empty on a large landscape screen. Purely
+/// decorative: no navigation, no state, no new business logic.
+class _VisitorGreetingPanel extends StatelessWidget {
+  const _VisitorGreetingPanel();
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context).textTheme;
+
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.xxl),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: AppRadii.cardShape,
+        border: Border.all(color: AppColors.borderSoft),
+        boxShadow: AppShadows.card,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(
+            height: 180,
+            child: Lottie.asset(
+              'assets/lottie/handshake.json',
+              repeat: true,
+              fit: BoxFit.contain,
+              errorBuilder: (_, __, ___) => const Icon(
+                Icons.diversity_3_rounded,
+                color: AppColors.brand,
+                size: 72,
+              ),
+            ),
+          ),
+          const SizedBox(height: AppSpacing.xl),
+          Text(
+            'Every Visitor is Welcome.',
+            textAlign: TextAlign.center,
+            style: t.headlineSmall,
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          Text(
+            'Manage visitors, issue passes, and monitor gate activity with ease',
+            textAlign: TextAlign.center,
+            style: t.bodyMedium,
+          ),
+        ],
+      ),
     );
   }
 }
@@ -141,6 +315,7 @@ class _DashboardHeaderState extends State<_DashboardHeader> {
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context).textTheme;
+    final isTablet = _isTablet(context);
 
     return Row(
       children: [
@@ -152,14 +327,17 @@ class _DashboardHeaderState extends State<_DashboardHeader> {
             children: [
               Text(
                 _name.isEmpty ? 'Welcome' : _name,
-                style: t.titleLarge?.copyWith(fontSize: 21),
+                style: t.titleLarge?.copyWith(fontSize: isTablet ? 26 : 21),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
-              const SizedBox(height: 2),
+              SizedBox(height: isTablet ? 4 : 2),
               Text(
                 _contactNo,
-                style: t.bodySmall?.copyWith(color: AppColors.muted),
+                style: t.bodySmall?.copyWith(
+                  color: AppColors.muted,
+                  fontSize: isTablet ? 15 : null,
+                ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
@@ -170,6 +348,7 @@ class _DashboardHeaderState extends State<_DashboardHeader> {
         _IconAction(
           icon: Icons.notifications_none_rounded,
           tooltip: 'Notifications',
+          iconSize: isTablet ? 27 : 23,
           onTap: () => Navigator.of(context).push(NotificationScreen.route()),
         ),
         // Guard-only: scan the visitor QR pass (opens the camera scanner).
@@ -177,15 +356,20 @@ class _DashboardHeaderState extends State<_DashboardHeader> {
           _IconAction(
             icon: Icons.qr_code_scanner_rounded,
             tooltip: 'Scan Visitor QR Pass',
+            iconSize: isTablet ? 27 : 23,
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute<void>(
                 builder: (_) => const ScanVisitorScreen(),
               ),
             ),
           ),
-        const SizedBox(width: AppSpacing.sm),
+        SizedBox(width: isTablet ? AppSpacing.md : AppSpacing.sm),
         // Logout icon — iOS-style tinted circle. Tap -> confirm dialog.
-        _LogoutIconButton(onTap: () => _onLogoutTap(context)),
+        _LogoutIconButton(
+          onTap: () => _onLogoutTap(context),
+          padding: isTablet ? 12 : 10,
+          iconSize: isTablet ? 25 : 21,
+        ),
       ],
     );
   }
@@ -193,9 +377,15 @@ class _DashboardHeaderState extends State<_DashboardHeader> {
 
 /// A soft, tinted circular logout button with comfortable iOS-style padding.
 class _LogoutIconButton extends StatelessWidget {
-  const _LogoutIconButton({required this.onTap});
+  const _LogoutIconButton({
+    required this.onTap,
+    this.padding = 10,
+    this.iconSize = 21,
+  });
 
   final VoidCallback onTap;
+  final double padding;
+  final double iconSize;
 
   @override
   Widget build(BuildContext context) {
@@ -207,9 +397,9 @@ class _LogoutIconButton extends StatelessWidget {
         onTap: onTap,
         splashColor: AppColors.brand.withValues(alpha: 0.18),
         highlightColor: AppColors.brand.withValues(alpha: 0.08),
-        child: const Padding(
-          padding: EdgeInsets.all(10),
-          child: Icon(Icons.logout_rounded, color: AppColors.brand, size: 21),
+        child: Padding(
+          padding: EdgeInsets.all(padding),
+          child: Icon(Icons.logout_rounded, color: AppColors.brand, size: iconSize),
         ),
       ),
     );
@@ -217,16 +407,22 @@ class _LogoutIconButton extends StatelessWidget {
 }
 
 class _IconAction extends StatelessWidget {
-  const _IconAction({required this.icon, required this.tooltip, this.onTap});
+  const _IconAction({
+    required this.icon,
+    required this.tooltip,
+    this.onTap,
+    this.iconSize = 23,
+  });
 
   final IconData icon;
   final String tooltip;
   final VoidCallback? onTap;
+  final double iconSize;
 
   @override
   Widget build(BuildContext context) {
     return IconButton(
-      icon: Icon(icon, color: AppColors.ink, size: 23),
+      icon: Icon(icon, color: AppColors.ink, size: iconSize),
       tooltip: tooltip,
       visualDensity: VisualDensity.compact,
       onPressed: onTap ?? () {},
@@ -353,6 +549,185 @@ class _ActionGridState extends State<_ActionGrid> {
   }
 }
 
+/// Tablet action grid — a real 2x2, not a wrapped 3-up row with an orphan
+/// tile.
+class _TabletActionsGrid extends StatefulWidget {
+  const _TabletActionsGrid();
+
+  @override
+  State<_TabletActionsGrid> createState() => _TabletActionsGridState();
+}
+
+class _TabletActionsGridState extends State<_TabletActionsGrid> {
+  String _iUserType = '';
+
+  bool get _isGuard => _iUserType == "1";
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserType();
+  }
+
+  Future<void> _loadUserType() async {
+    final prefs = await SharedPreferences.getInstance();
+    final value = (prefs.getString('iUserType') ?? '').trim();
+    if (!mounted) return;
+    setState(() => _iUserType = value);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final firstTitle = _isGuard ? "Today's List" : 'My Invites';
+
+    final tiles = [
+      (Icons.person_add_alt_1_outlined, firstTitle, 'People you invited'),
+      (Icons.verified_user_outlined, 'Gate Log', 'Guard entries'),
+      (Icons.access_time_rounded, 'Yesterday', 'Past 24 hours'),
+      (Icons.calendar_month_outlined, 'Monthly', 'This month'),
+    ];
+
+    Widget tileRow(int a, int b) {
+      final (iconA, titleA, subA) = tiles[a];
+      final (iconB, titleB, subB) = tiles[b];
+      // Plain Row, no IntrinsicHeight/stretch: both cards carry near-identical
+      // content (icon + up to 2 title lines + 1 subtitle line) so they land
+      // at the same height on their own, the same way the mobile grid does.
+      return Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: _TabletActionCard(
+              icon: iconA,
+              title: titleA,
+              subtitle: subA,
+              onTap: () => _openTile(context, a, titleA),
+            ),
+          ),
+          const SizedBox(width: AppSpacing.xl),
+          Expanded(
+            child: _TabletActionCard(
+              icon: iconB,
+              title: titleB,
+              subtitle: subB,
+              onTap: () => _openTile(context, b, titleB),
+            ),
+          ),
+        ],
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        tileRow(0, 1),
+        const SizedBox(height: AppSpacing.xl),
+        tileRow(2, 3),
+      ],
+    );
+  }
+
+  /// Mirrors [_ActionGridState._openTile] exactly — same routes, same
+  /// labels, same "coming soon" fallback. Tablet chrome only.
+  Future<void> _openTile(BuildContext context, int index, String title) async {
+    Widget? screen;
+
+    if (index == 0) {
+      final prefs = await SharedPreferences.getInstance();
+      final iUserType = (prefs.getString('iUserType') ?? '').trim();
+      if (!context.mounted) return;
+
+      screen = iUserType == "1"
+          ? const ExpectedGuestScreen()
+          : const InviteGuestListScreen();
+    } else {
+      screen = switch (index) {
+        1 => const GateLogScreen(),
+        2 => const YesterdayGuestListScreen(),
+        3 => const MonthGuestListScreen(),
+        _ => null,
+      };
+    }
+
+    final next = screen;
+    if (next == null) {
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text('$title — coming soon')));
+      return;
+    }
+
+    Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => next));
+  }
+}
+
+/// Tablet stat-card tile: icon left, title/subtitle right, chevron affordance.
+/// Horizontal so a wide 2x2 cell never leaves dead space to the right.
+class _TabletActionCard extends StatelessWidget {
+  const _TabletActionCard({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    this.onTap,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context).textTheme;
+
+    return AppCard(
+      onTap: onTap,
+      padding: const EdgeInsets.all(AppSpacing.xl),
+      child: Row(
+        children: [
+          Container(
+            width: 56,
+            height: 56,
+            decoration: BoxDecoration(
+              color: AppColors.brandTint,
+              borderRadius: BorderRadius.circular(AppRadii.md),
+            ),
+            child: Icon(icon, color: AppColors.brand, size: 27),
+          ),
+          const SizedBox(width: AppSpacing.lg),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  title,
+                  style: t.titleMedium?.copyWith(fontSize: 18),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  subtitle,
+                  style: t.bodySmall?.copyWith(fontSize: 14),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          const Icon(
+            Icons.chevron_right_rounded,
+            color: AppColors.faint,
+            size: 22,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _AddGuestBar extends StatelessWidget {
   const _AddGuestBar({required this.gutter});
 
@@ -378,6 +753,45 @@ class _AddGuestBar extends StatelessWidget {
             AppSpacing.md,
           ),
           child: CenteredBar(
+            child: PrimaryButton(
+              label: 'Issue Visitor Pass',
+              trailing: Icons.arrow_forward_rounded,
+              onPressed: () => _onAddGuest(context),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Tablet CTA bar — a contained, elevated pass-issuing bar instead of a
+/// mobile-style edge-to-edge button stretched across the whole screen.
+class _TabletAddGuestBar extends StatelessWidget {
+  const _TabletAddGuestBar();
+
+  void _onAddGuest(BuildContext context) {
+    showInviteSetupSheet(context, Invite());
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final gutter = AppSpacing.gutter(context);
+
+    return Container(
+      decoration: const BoxDecoration(
+        color: AppColors.surface,
+        boxShadow: AppShadows.sheet,
+      ),
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: EdgeInsets.symmetric(
+            horizontal: gutter,
+            vertical: AppSpacing.lg,
+          ),
+          child: CenteredBar(
+            maxWidth: 460,
             child: PrimaryButton(
               label: 'Issue Visitor Pass',
               trailing: Icons.arrow_forward_rounded,

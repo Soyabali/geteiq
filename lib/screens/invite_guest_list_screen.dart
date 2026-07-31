@@ -8,6 +8,13 @@ import '../widgets/app_card.dart';
 import '../widgets/app_scaffold.dart';
 import '../widgets/pill_search_field.dart';
 
+/// Tablet breakpoint. Phones (< 600) always render the original, untouched
+/// single-column mobile list.
+bool _isTablet(BuildContext context) => MediaQuery.sizeOf(context).width >= 600;
+
+/// Landscape / large tablets get a 3-column grid; portrait-ish tablets get 2.
+bool _isWideTablet(BuildContext context) => MediaQuery.sizeOf(context).width >= 900;
+
 /// "Invite guest list" (management side) — the visits the logged-in manager
 /// raised, via [VisitorListRepo].
 ///
@@ -84,6 +91,7 @@ class _InviteGuestListScreenState extends State<InviteGuestListScreen> {
   Widget build(BuildContext context) {
     final gutter = AppSpacing.gutter(context);
     final rows = _filtered;
+    final isTablet = _isTablet(context);
 
     return Scaffold(
       backgroundColor: AppColors.canvas,
@@ -101,26 +109,50 @@ class _InviteGuestListScreenState extends State<InviteGuestListScreen> {
       ),
       body: SafeArea(
         bottom: false,
-        child: CenteredFill(
-          child: Column(
-            children: [
-              Padding(
-                padding: EdgeInsets.fromLTRB(
-                  gutter,
-                  AppSpacing.xs,
-                  gutter,
-                  AppSpacing.md,
+        child: isTablet
+            ? Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 1120),
+                  child: Column(
+                    children: [
+                      Padding(
+                        padding: EdgeInsets.fromLTRB(
+                          gutter,
+                          AppSpacing.md,
+                          gutter,
+                          AppSpacing.lg,
+                        ),
+                        child: PillSearchField(
+                          controller: _search,
+                          hint: 'Search invited guests',
+                          onChanged: () => setState(() {}),
+                        ),
+                      ),
+                      Expanded(child: _body(rows, gutter)),
+                    ],
+                  ),
                 ),
-                child: PillSearchField(
-                  controller: _search,
-                  hint: 'Search invited guests',
-                  onChanged: () => setState(() {}),
+              )
+            : CenteredFill(
+                child: Column(
+                  children: [
+                    Padding(
+                      padding: EdgeInsets.fromLTRB(
+                        gutter,
+                        AppSpacing.xs,
+                        gutter,
+                        AppSpacing.md,
+                      ),
+                      child: PillSearchField(
+                        controller: _search,
+                        hint: 'Search invited guests',
+                        onChanged: () => setState(() {}),
+                      ),
+                    ),
+                    Expanded(child: _body(rows, gutter)),
+                  ],
                 ),
               ),
-              Expanded(child: _body(rows, gutter)),
-            ],
-          ),
-        ),
       ),
     );
   }
@@ -146,6 +178,11 @@ class _InviteGuestListScreenState extends State<InviteGuestListScreen> {
             : 'No guests match "${_search.text.trim()}"',
       );
     }
+
+    if (_isTablet(context)) {
+      return _GuestGrid(rows: rows, gutter: gutter);
+    }
+
     return ListView.separated(
       physics: const BouncingScrollPhysics(
         parent: AlwaysScrollableScrollPhysics(),
@@ -159,6 +196,55 @@ class _InviteGuestListScreenState extends State<InviteGuestListScreen> {
       itemCount: rows.length,
       separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.md),
       itemBuilder: (context, i) => _GuestCard(visitor: rows[i]),
+    );
+  }
+}
+
+/// Tablet grid — 2 columns on portrait/medium tablets, 3 on wide landscape,
+/// so the list actually uses the extra width instead of floating a single
+/// phone-width column in the middle of the screen.
+class _GuestGrid extends StatelessWidget {
+  const _GuestGrid({required this.rows, required this.gutter});
+
+  final List<GuardVisitor> rows;
+  final double gutter;
+
+  @override
+  Widget build(BuildContext context) {
+    final crossAxisCount = _isWideTablet(context) ? 3 : 2;
+    const spacing = AppSpacing.md;
+
+    // A Wrap of fixed-width cards — not a fixed-extent GridView — so each
+    // card keeps its own natural height (some rows have an optional second
+    // "+N other names" line, so heights genuinely vary). This trades
+    // perfectly aligned row heights for zero risk of clipped/overflowing
+    // card content.
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final available = constraints.maxWidth - gutter * 2;
+        final cardWidth =
+            (available - spacing * (crossAxisCount - 1)) / crossAxisCount;
+
+        return SingleChildScrollView(
+          physics: const BouncingScrollPhysics(
+            parent: AlwaysScrollableScrollPhysics(),
+          ),
+          padding: EdgeInsets.fromLTRB(
+            gutter,
+            AppSpacing.xs,
+            gutter,
+            AppSpacing.xxl,
+          ),
+          child: Wrap(
+            spacing: spacing,
+            runSpacing: spacing,
+            children: [
+              for (final v in rows)
+                SizedBox(width: cardWidth, child: _GuestCard(visitor: v)),
+            ],
+          ),
+        );
+      },
     );
   }
 }
