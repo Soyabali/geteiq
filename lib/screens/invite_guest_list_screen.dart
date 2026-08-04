@@ -255,7 +255,7 @@ class _GuestGrid extends StatelessWidget {
 /// the QR code value instead:
 ///   sGuestNames  -> "Amit Sharma  +1"  (+ the rest in brackets)
 ///   sQRCodeVal   -> "QR Code : 493893"
-///   dDate/dTime  -> "Today · 3:58 PM"
+///   dDate/dTime  -> "3 Aug 2026 · 9:46 AM"
 ///   iValidHours  -> "· 8 Hour(s)"
 ///   sStatus      -> the coloured chip on the right
 class _GuestCard extends StatelessWidget {
@@ -270,23 +270,18 @@ class _GuestCard extends StatelessWidget {
       .where((s) => s.isNotEmpty)
       .toList();
 
-  /// "Today · 3:58 PM · 8 Hour(s)" — falls back to the raw strings if the
-  /// backend ever sends a date this can't parse.
+  /// dDate "2026-08-03" + dTime "09:46:00" -> "3 Aug 2026 · 9:46 AM", with
+  /// iValidHours appended -> "3 Aug 2026 · 9:46 AM · 1 Hour(s)".
+  ///
+  /// Same absolute format the Month Guest List card uses — no relative
+  /// "Today / Tomorrow" labels, so the actual date is always visible. Falls
+  /// back to the raw strings if the backend ever sends a date this can't parse.
   String get _meta {
     final duration = visitor.validHours.trim();
     String when;
     try {
       final dt = DateTime.parse('${visitor.date} ${visitor.time}');
-      final day = DateTime(dt.year, dt.month, dt.day);
-      final now = DateTime.now();
-      final today = DateTime(now.year, now.month, now.day);
-      final label = switch (day.difference(today).inDays) {
-        0 => 'Today',
-        1 => 'Tomorrow',
-        -1 => 'Yesterday',
-        _ => DateFormat('d MMM yyyy').format(dt),
-      };
-      when = '$label · ${DateFormat('h:mm a').format(dt)}';
+      when = DateFormat('d MMM yyyy · h:mm a').format(dt);
     } catch (_) {
       when = '${visitor.date} ${visitor.time}'.trim();
     }

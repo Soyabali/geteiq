@@ -35,7 +35,7 @@ class ExpectedGuest {
   final int plus; // extra guests count, e.g. +3
   final String requestedBy; // sUserName — the host who raised the request
   final String phone;
-  final String when; // "Today · 4:30 PM"
+  final String when; // dDate + dTime, preformatted: "24 Jul 2026 · 6:00 PM"
   final String duration; // "3 hrs"
   final String note;
   final String approval; // badge text

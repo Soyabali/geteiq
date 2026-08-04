@@ -149,29 +149,24 @@ class GateEntry {
   /// Extra guests beyond the first, for the "+N" badge.
   int get plus => names.length > 1 ? names.length - 1 : 0;
 
-  /// Raw `dDate` + `dTime` exactly as the API sent them, joined by a space —
-  /// e.g. `"2026-07-29 09:37:00"`. Used by the Gate Log "Date :" row.
-  String get dateTime => '$date $time'.trim();
-
-  /// "Today · 9:37 AM" — falls back to the raw strings if the backend sends a
-  /// date this can't parse.
-  String get when {
+  /// `dDate` + `dTime` formatted for display — e.g. "2026-07-29" + "09:37:00"
+  /// -> "29 Jul 2026 · 9:37 AM". Used by the Gate Log "Date :" row.
+  ///
+  /// Same absolute format the Month / Invite Guest List cards use — no
+  /// relative "Today / Tomorrow" labels, so the actual date is always visible.
+  /// Falls back to the raw API strings if the backend ever sends a date this
+  /// can't parse.
+  String get dateTime {
     try {
       final dt = DateTime.parse('$date $time');
-      final day = DateTime(dt.year, dt.month, dt.day);
-      final now = DateTime.now();
-      final today = DateTime(now.year, now.month, now.day);
-      final label = switch (day.difference(today).inDays) {
-        0 => 'Today',
-        1 => 'Tomorrow',
-        -1 => 'Yesterday',
-        _ => DateFormat('d MMM yyyy').format(dt),
-      };
-      return '$label · ${DateFormat('h:mm a').format(dt)}';
+      return DateFormat('d MMM yyyy · h:mm a').format(dt);
     } catch (_) {
       return '$date $time'.trim();
     }
   }
+
+  /// Alias for [dateTime], kept so both names render the identical string.
+  String get when => dateTime;
 
   /// Matched against the search box.
   String get searchText =>
