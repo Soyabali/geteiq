@@ -475,7 +475,7 @@ class _HeroCard extends StatelessWidget {
               right: -14,
               bottom: -34,
               child: Text(
-                'IQ',
+                'Pro',
                 style: TextStyle(
                   fontSize: 120,
                   height: 1,
@@ -515,7 +515,7 @@ class _HeroCard extends StatelessWidget {
                       ),
                       const SizedBox(width: AppSpacing.sm),
                       const Text(
-                        'gateIQ',
+                        'GatePro',
                         style: TextStyle(
                           color: Colors.white,
                           fontSize: 20,

@@ -74,7 +74,7 @@ class BrandWordmark extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Text(
-      'gateIQ',
+      'GatePro',
       style: Theme.of(context).textTheme.displaySmall?.copyWith(
         fontSize: fontSize,
         color: color ?? AppColors.ink,
