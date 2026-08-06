@@ -11,6 +11,7 @@ import '../widgets/app_scaffold.dart';
 import '../widgets/company_carousel.dart';
 import '../widgets/logout_dialog.dart';
 import 'expected_guest_screen.dart';
+import 'frequent_user_screen.dart';
 import 'gate_log_screen.dart';
 import 'invite_setup_sheet.dart';
 import 'invite_guest_list_screen.dart';
@@ -75,13 +76,17 @@ class _MobileDashboardBody extends StatelessWidget {
                 sliver: const SliverToBoxAdapter(child: CompanyCarousel()),
               ),
               SliverPadding(
-                padding: EdgeInsets.fromLTRB(
-                  gutter,
-                  AppSpacing.xxl,
-                  gutter,
-                  AppSpacing.xxl,
-                ),
+                // Bottom space now belongs to the slot below, so management
+                // gets exactly 10px between the grid and its button while a
+                // guard keeps the original AppSpacing.xxl gap.
+                padding: EdgeInsets.fromLTRB(gutter, AppSpacing.xxl, gutter, 0),
                 sliver: const _ActionGrid(),
+              ),
+              SliverPadding(
+                padding: EdgeInsets.symmetric(horizontal: gutter),
+                sliver: const SliverToBoxAdapter(
+                  child: _FrequentUserSlot(bottomSpacing: AppSpacing.xxl),
+                ),
               ),
             ],
           ),
@@ -188,6 +193,68 @@ class _TabletMainColumn extends StatelessWidget {
         ),
         const SizedBox(height: AppSpacing.xxl),
         const _TabletActionsGrid(),
+        // Management only. Renders nothing at all for a guard, so the tablet
+        // column ends at the grid exactly as it did before.
+        const _FrequentUserSlot(bottomSpacing: 0),
+      ],
+    );
+  }
+}
+
+/// Management-only "Frequent User" button, parked directly under the action
+/// grid with a 10px gap.
+///
+/// A guard (`iUserType == "1"`) gets [bottomSpacing] of blank space instead —
+/// the exact height the grid's own bottom padding used to occupy — so the
+/// guard dashboard is pixel-identical to before. The role is unknown for the
+/// first frame while SharedPreferences loads; that case renders the guard
+/// layout too, so the button never flashes in and out for a guard.
+class _FrequentUserSlot extends StatefulWidget {
+  const _FrequentUserSlot({required this.bottomSpacing});
+
+  /// Space kept below the button, and the height rendered in place of the
+  /// whole slot when the user isn't management.
+  final double bottomSpacing;
+
+  @override
+  State<_FrequentUserSlot> createState() => _FrequentUserSlotState();
+}
+
+class _FrequentUserSlotState extends State<_FrequentUserSlot> {
+  /// null until SharedPreferences has been read.
+  bool? _isManagement;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserType();
+  }
+
+  Future<void> _loadUserType() async {
+    final prefs = await SharedPreferences.getInstance();
+    final iUserType = (prefs.getString('iUserType') ?? '').trim();
+    if (!mounted) return;
+    // Only the exact string "1" is a guard — same rule as the rest of the app.
+    setState(() => _isManagement = iUserType != "1");
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_isManagement != true) {
+      return SizedBox(height: widget.bottomSpacing);
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const SizedBox(height: 10),
+        LightButton(
+          label: 'Frequent User',
+          onPressed: () =>
+              Navigator.of(context).push(FrequentUserScreen.route()),
+        ),
+        SizedBox(height: widget.bottomSpacing),
       ],
     );
   }

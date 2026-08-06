@@ -104,6 +104,94 @@ class _PrimaryButtonState extends State<PrimaryButton> {
   }
 }
 
+/// White twin of [PrimaryButton] — identical height, radius and press-scale,
+/// but a plain white surface with ink text so it reads as the quieter of two
+/// stacked actions (the dashboard's "Frequent User" sits under the grid this
+/// way).
+///
+/// Type defaults to `titleMedium`, matching the dashboard grid tiles, so the
+/// button and the cards above it stay on the same typographic step.
+class LightButton extends StatefulWidget {
+  const LightButton({
+    super.key,
+    required this.label,
+    this.onPressed,
+    this.trailing,
+    this.expand = true,
+  });
+
+  final String label;
+  final VoidCallback? onPressed;
+  final IconData? trailing;
+  final bool expand;
+
+  @override
+  State<LightButton> createState() => _LightButtonState();
+}
+
+class _LightButtonState extends State<LightButton> {
+  bool _down = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = widget.onPressed != null;
+
+    return Semantics(
+      button: true,
+      enabled: enabled,
+      label: widget.label,
+      child: GestureDetector(
+        onTapDown: enabled ? (_) => setState(() => _down = true) : null,
+        onTapUp: enabled ? (_) => setState(() => _down = false) : null,
+        onTapCancel: enabled ? () => setState(() => _down = false) : null,
+        onTap: enabled ? widget.onPressed : null,
+        child: AnimatedScale(
+          scale: _down ? 0.97 : 1,
+          duration: const Duration(milliseconds: 120),
+          curve: Curves.easeOut,
+          child: AnimatedOpacity(
+            opacity: enabled ? 1 : 0.45,
+            duration: const Duration(milliseconds: 180),
+            child: Container(
+              width: widget.expand ? double.infinity : null,
+              // Same 54 as PrimaryButton so a stacked pair lines up exactly.
+              height: 54,
+              padding: widget.expand
+                  ? null
+                  : const EdgeInsets.symmetric(horizontal: AppSpacing.xxl),
+              decoration: BoxDecoration(
+                color: AppColors.surface,
+                borderRadius: AppRadii.buttonShape,
+                border: Border.all(color: AppColors.borderSoft),
+                boxShadow: AppShadows.card,
+              ),
+              child: Center(
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Flexible(
+                      child: Text(
+                        widget.label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                    ),
+                    if (widget.trailing != null) ...[
+                      const SizedBox(width: AppSpacing.sm),
+                      Icon(widget.trailing, color: AppColors.ink, size: 20),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// Quiet counterpart to [PrimaryButton] — white surface, hairline border.
 class SecondaryButton extends StatelessWidget {
   const SecondaryButton({super.key, required this.label, this.onPressed});
